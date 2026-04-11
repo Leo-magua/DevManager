@@ -65,8 +65,42 @@ function setupWebSocket(wss, getTaskQueueStatus) {
         if (msg.type === 'terminal_input' && msg.project_id && msg.data) {
           const { getAgentExecutor } = require('../core/agent-executor');
           const executor = getAgentExecutor();
+          
+          console.log(`[WebSocket] 收到终端输入: project=${msg.project_id}, data=${JSON.stringify(msg.data)}`);
+          
           if (executor && executor.processes[msg.project_id]) {
-            executor.processes[msg.project_id].write(msg.data);
+            const ptyProcess = executor.processes[msg.project_id];
+            
+            // 特殊处理 Ctrl+C - 直接发送 SIGINT 信号
+            if (msg.data === '\u0003' || msg.data === '\x03') {
+              try {
+                // 先尝试写入 Ctrl+C 字符（让 shell 自己处理）
+                ptyProcess.write('\x03');
+                
+                // 然后发送 SIGINT 到 PTY 进程组
+                setTimeout(() => {
+                  try {
+                    ptyProcess.kill('SIGINT');
+                  } catch (e) {}
+                }, 100);
+                
+                console.log(`[WebSocket] 发送 Ctrl+C 到 ${msg.project_id}`);
+              } catch (e) {
+                console.error(`[WebSocket] 发送 Ctrl+C 失败:`, e.message);
+              }
+            } else {
+              // 普通输入直接写入 PTY
+              ptyProcess.write(msg.data);
+              console.log(`[WebSocket] 已发送输入到 PTY: ${JSON.stringify(msg.data.substring(0, 50))}`);
+            }
+          } else {
+            console.log(`[WebSocket] 项目 ${msg.project_id} 没有正在运行的 PTY 进程`);
+            // 通知客户端没有正在执行的任务
+            ws.send(JSON.stringify({
+              type: 'terminal_error',
+              project_id: msg.project_id,
+              error: '没有正在执行的任务，无法发送输入'
+            }));
           }
         }
       } catch (err) {

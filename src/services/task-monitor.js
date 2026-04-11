@@ -1,8 +1,11 @@
 /**
  * 任务监控器
+ * 
+ * 新架构：从各项目的 dev_state.json 读取状态
  */
 const { getTaskQueue } = require('../core/task-queue');
 const { getAgentExecutor } = require('../core/agent-executor');
+const { getConfig } = require('../config');
 
 class TaskMonitor {
   constructor() {
@@ -26,38 +29,47 @@ class TaskMonitor {
   async check() {
     const taskQueue = getTaskQueue();
     const agentExecutor = getAgentExecutor();
+    const config = getConfig();
     
-    // 检查卡死任务 - 重置后不自动执行，让用户决定是否继续
-    const stalledTasks = await taskQueue.checkStalledTasks();
-    for (const { projectId, task } of stalledTasks) {
-      console.log(`[TaskMonitor] 回收卡死任务: ${projectId}/${task.feature_name}`);
-      await taskQueue.resetProjectTask(projectId, '执行超时(30分钟)');
-      // 不自动重新执行，给用户干预的机会
-      console.log(`[TaskMonitor] ${projectId} 任务已重置，等待用户手动触发或新任务添加`);
+    // 自动执行任务功能已禁用 - 必须用户手动点击开始
+    // 如需启用，请设置环境变量 ENABLE_AUTO_TASK_EXECUTION=true
+    const autoExecutionEnabled = process.env.ENABLE_AUTO_TASK_EXECUTION === 'true';
+    
+    if (!autoExecutionEnabled) {
+      return; // 完全禁用自动执行
     }
     
-    // 检查是否有待处理任务的项目（只检查最近10分钟内更新的任务）
-    const status = taskQueue.getStatus();
-    const now = new Date();
-    const CUTOFF_MINUTES = 10; // 10分钟内更新的任务才自动执行
-    
-    const pendingProjects = [...new Set(status.queue.pending.map(t => t.project_id))];
-    
-    for (const projectId of pendingProjects) {
-      if (status.queue.in_progress[projectId] || agentExecutor.executingProjects.has(projectId)) {
+    // 检查每个项目是否有待处理任务需要自动执行
+    for (const project of config.monitored_projects) {
+      if (!project.active) continue;
+      
+      const projectId = project.id;
+      
+      // 检查是否已有任务在执行
+      const executing = taskQueue.getExecutingTask(projectId);
+      if (executing || agentExecutor.executingProjects.has(projectId)) {
         continue;
       }
       
-      // 获取该项目的第一个待处理任务
-      const task = status.queue.pending.find(t => t.project_id === projectId);
-      if (!task) continue;
+      // 跳过被手动停止的项目
+      if (agentExecutor.stoppedProjects && agentExecutor.stoppedProjects.has(projectId)) {
+        continue;
+      }
       
-      // 检查任务是否最近更新过
-      const taskUpdated = new Date(task.updated_at || task.created_at);
-      const minutesSinceUpdate = (now - taskUpdated) / 1000 / 60;
+      // 获取待处理任务
+      const pending = await taskQueue.getPendingTasks(projectId);
+      if (pending.length === 0) continue;
       
-      if (minutesSinceUpdate <= CUTOFF_MINUTES) {
-        console.log(`[TaskMonitor] 检测到 ${projectId} 有新待处理任务 (${minutesSinceUpdate.toFixed(1)}分钟前)，触发执行`);
+      // 获取第一个待处理任务
+      const task = pending[0];
+      
+      // 检查任务是否最近创建（10分钟内）
+      const now = new Date();
+      const taskCreated = new Date(task.created_at);
+      const minutesSinceCreated = (now - taskCreated) / 1000 / 60;
+      
+      if (minutesSinceCreated <= 10) {
+        console.log(`[TaskMonitor] 检测到 ${projectId} 有新待处理任务 (${minutesSinceCreated.toFixed(1)}分钟前)，触发执行`);
         agentExecutor.tryExecute(projectId);
       }
     }

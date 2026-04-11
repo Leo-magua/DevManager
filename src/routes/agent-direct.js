@@ -99,11 +99,24 @@ router.post('/direct', async (req, res) => {
 
     await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
 
-    // 如果需要执行，加入任务队列
     let task = null;
-    if (!record_only && auto_execute) {
+    if (record_only && auto_execute) {
       const taskQueue = getTaskQueue();
-      task = await taskQueue.addTask(project_id, newId, newFeature);
+      const { getAgentExecutor } = require('../core/agent-executor');
+      if (taskQueue.getExecutingTask(project_id)) {
+        await taskQueue.enqueueFeature(project_id, newFeature.id);
+      } else {
+        const claimResult = await taskQueue.claimTask(project_id, {
+          agent_id: 'backend',
+          agent_name: 'Backend Direct'
+        }, { featureId: newFeature.id });
+        if (claimResult.success) {
+          task = claimResult.task;
+          getAgentExecutor().executeTask(project_id, claimResult.task).catch((err) => {
+            console.error('[agent-direct] executeTask:', err);
+          });
+        }
+      }
     }
 
     // 广播更新

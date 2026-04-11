@@ -48,9 +48,8 @@ async function startup() {
   await loadConfig();
   const config = getConfig();
   
-  // 2. 初始化任务队列
+  // 2. 获取任务队列实例（不再需要从文件加载）
   const taskQueue = getTaskQueue();
-  await taskQueue.ensureQueueFile();
   
   // 3. 设置 WebSocket
   setupWebSocket(wss, () => taskQueue.getStatus());
@@ -115,39 +114,40 @@ async function startup() {
     }
     
     // 9. 启动时检查所有有待处理任务的项目
-    // 注意：只自动执行最近5分钟内添加的任务，避免重启后执行历史遗留任务
-    setTimeout(() => {
-      const startupTime = new Date();
-      const CUTOFF_MINUTES = 5; // 5分钟内的任务才自动执行
-      
+    setTimeout(async () => {
       console.log('[Startup] 检查待处理任务...');
-      const status = taskQueue.getStatus();
-      const pendingProjects = [...new Set(status.queue.pending.map(t => t.project_id))];
-      let autoStartCount = 0;
       
-      for (const projectId of pendingProjects) {
-        if (status.queue.in_progress[projectId]) continue;
+      // 读取环境变量判断是否启用自动执行（默认不自动执行）
+      const autoExecuteOnStartup = process.env.AUTO_EXECUTE_ON_STARTUP === 'true';
+      
+      if (!autoExecuteOnStartup) {
+        console.log('[Startup] 自动执行已禁用（设置 AUTO_EXECUTE_ON_STARTUP=true 启用）');
+        console.log('[Startup] 待处理任务检查完成');
+        return;
+      }
+      
+      for (const project of config.monitored_projects) {
+        if (!project.active) continue;
         
-        // 获取该项目的第一个待处理任务
-        const task = status.queue.pending.find(t => t.project_id === projectId);
-        if (!task) continue;
+        const pending = await taskQueue.getPendingTasks(project.id);
+        if (pending.length === 0) continue;
         
-        // 检查任务创建时间是否在最近5分钟内
+        // 获取第一个待处理任务
+        const task = pending[0];
+        
+        // 检查任务是否最近创建（5分钟内）
         const taskCreated = new Date(task.created_at);
-        const minutesSinceCreation = (startupTime - taskCreated) / 1000 / 60;
+        const minutesSinceCreation = (new Date() - taskCreated) / 1000 / 60;
         
-        if (minutesSinceCreation <= CUTOFF_MINUTES) {
-          console.log(`[Startup] 自动执行任务: ${projectId} - ${task.feature_name} (创建于 ${minutesSinceCreation.toFixed(1)} 分钟前)`);
-          agentExecutor.tryExecute(projectId);
-          autoStartCount++;
+        if (minutesSinceCreation <= 5) {
+          console.log(`[Startup] 自动执行任务: ${project.id} - ${task.feature_name} (创建于 ${minutesSinceCreation.toFixed(1)} 分钟前)`);
+          agentExecutor.tryExecute(project.id);
         } else {
-          console.log(`[Startup] 跳过历史任务: ${projectId} - ${task.feature_name} (创建于 ${minutesSinceCreation.toFixed(1)} 分钟前，超过 ${CUTOFF_MINUTES} 分钟)`);
+          console.log(`[Startup] 跳过历史任务: ${project.id} - ${task.feature_name} (创建于 ${minutesSinceCreation.toFixed(1)} 分钟前)`);
         }
       }
       
-      if (autoStartCount === 0) {
-        console.log('[Startup] 没有新任务需要自动执行');
-      }
+      console.log('[Startup] 待处理任务检查完成');
     }, 3000);
   });
 }

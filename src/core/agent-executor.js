@@ -17,6 +17,7 @@ class AgentExecutor {
   constructor() {
     this.executingProjects = new Set();
     this.processes = {};
+    this.stoppedProjects = new Set(); // 记录被手动停止的项目
   }
 
   async tryExecute(projectId = null) {
@@ -28,13 +29,25 @@ class AgentExecutor {
       return;
     }
     
+    // 如果指定了项目且被手动停止过，跳过并清除标记
+    if (projectId && this.stoppedProjects.has(projectId)) {
+      console.log(`[AgentExecutor] ${projectId} 被手动停止，跳过自动执行`);
+      this.stoppedProjects.delete(projectId); // 清除标记，允许下次手动启动
+      return;
+    }
+    
     if (!projectId) {
-      const status = taskQueue.getStatus();
-      const pendingProjects = [...new Set(status.queue.pending.map(t => t.project_id))];
+      const config = getConfig();
       
-      for (const pid of pendingProjects) {
-        if (!this.executingProjects.has(pid) && !status.queue.in_progress[pid]) {
-          projectId = pid;
+      for (const project of config.monitored_projects) {
+        if (!project.active) continue;
+        if (this.executingProjects.has(project.id)) continue;
+        
+        const st = await taskQueue.getStatus(project.id);
+        const executing = taskQueue.getExecutingTask(project.id);
+        
+        if (st.queued_count > 0 && !executing) {
+          projectId = project.id;
           break;
         }
       }
@@ -47,15 +60,15 @@ class AgentExecutor {
       return;
     }
 
-    const status = taskQueue.getStatus(projectId);
+    const status = await taskQueue.getStatus(projectId);
     
-    if (status.in_progress) {
-      console.log(`[AgentExecutor] ${projectId} 有任务正在执行: ${status.in_progress.feature_name}`);
+    if (status.executing) {
+      console.log(`[AgentExecutor] ${projectId} 有任务正在执行: ${status.executing.feature_name}`);
       return;
     }
 
-    if (status.pending_count === 0) {
-      console.log(`[AgentExecutor] ${projectId} 队列为空，无任务可执行`);
+    if (!status.queued_count || status.queued_count === 0) {
+      console.log(`[AgentExecutor] ${projectId} 开发队列为空，无任务可执行`);
       return;
     }
 
@@ -90,8 +103,7 @@ class AgentExecutor {
     try {
       const prompt = this.generatePrompt(task, project);
       
-      await taskQueue.addLog(projectId, 'info', `开始开发任务: ${task.feature_name}`);
-      await taskQueue.addLog(projectId, 'command', `cd ${project.path}`);
+      await taskQueue.addChangelog(projectId, 'system', `开始开发任务: ${task.feature_name}`);
 
       const result = await this.runKimiAgent(projectId, prompt, project.path, task);
       
@@ -101,7 +113,11 @@ class AgentExecutor {
           files_changed: result.files_changed || []
         });
       } else {
-        await taskQueue.reportError(projectId, result.error || '执行失败', result.retry);
+        const retryResult = await taskQueue.reportError(projectId, result.error || '执行失败', result.retry);
+        // 如果是重试模式，重新入队而不是卡屏在 In_Progress
+        if (retryResult && retryResult.status === 'retry') {
+          await taskQueue.requeueForRetry(projectId);
+        }
       }
     } catch (err) {
       console.error(`[AgentExecutor] ${projectId} 执行异常:`, err);
@@ -110,7 +126,12 @@ class AgentExecutor {
       this.executingProjects.delete(projectId);
       delete this.processes[projectId];
       
-      setTimeout(() => this.tryExecute(projectId), 2000);
+      // 只有未被手动停止时才继续执行下一个任务
+      if (!this.stoppedProjects.has(projectId)) {
+        setTimeout(() => this.tryExecute(projectId), 2000);
+      } else {
+        console.log(`[AgentExecutor] ${projectId} 被标记为停止，不继续执行下一个任务`);
+      }
     }
   }
 
@@ -227,14 +248,7 @@ class AgentExecutor {
         terminalBuffer.append(projectId, data);
         broadcastTerminal(projectId, data);
         
-        const text = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r\n/g, '\n');
-        const lines = text.split('\n').filter(l => l.trim());
-        
-        const taskQueue = getTaskQueue();
-        for (const line of lines.slice(-3)) {
-          await taskQueue.addLog(projectId, 'info', line.substring(0, 200));
-        }
-        
+        // 记录到本地日志文件
         fs.appendFileSync(EXECUTOR_LOG_PATH, data);
       });
       
@@ -276,9 +290,37 @@ class AgentExecutor {
   }
 
   stop(projectId) {
+    // 标记为手动停止，防止自动重启
+    this.stoppedProjects.add(projectId);
+    
     if (this.processes[projectId]) {
       try {
-        this.processes[projectId].kill('SIGTERM');
+        const ptyProcess = this.processes[projectId];
+        
+        // 1. 先尝试 SIGINT（优雅终止）
+        try {
+          ptyProcess.kill('SIGINT');
+        } catch (e) {}
+        
+        // 2. 延迟后如果还在，发送 SIGTERM
+        setTimeout(() => {
+          try {
+            if (ptyProcess && !ptyProcess.killed) {
+              ptyProcess.kill('SIGTERM');
+            }
+          } catch (e) {}
+        }, 500);
+        
+        // 3. 再延迟后如果还在，强制 SIGKILL
+        setTimeout(() => {
+          try {
+            if (ptyProcess && !ptyProcess.killed) {
+              ptyProcess.kill('SIGKILL');
+            }
+          } catch (e) {}
+        }, 2000);
+        
+        console.log(`[AgentExecutor] 已发送停止信号到 ${projectId}，已标记为手动停止`);
       } catch (e) {
         console.error(`[AgentExecutor] 停止 ${projectId} 失败:`, e.message);
       }

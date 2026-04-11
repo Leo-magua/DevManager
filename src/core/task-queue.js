@@ -1,467 +1,467 @@
 /**
- * 任务队列系统 (支持多项目)
+ * 任务队列系统 (从各项目的 dev_state.json 读取)
+ * 
+ * 设计原则：
+ * - 不再维护独立的 task-queue.json
+ * - 以各项目路径下的 dev_state.json 为唯一数据源
+ * - 只在内存中维护当前执行中的任务状态
  */
 const fs = require('fs').promises;
 const path = require('path');
 const { getConfig } = require('../config');
 const { broadcast } = require('../websocket/broadcast');
 
-const QUEUE_PATH = path.join(__dirname, '../..', 'data', 'task-queue.json');
+/** 开发队列中等待（顺序 = feature_list 中相对顺序） */
+const STATUS_QUEUED = 'Queued';
 
 class TaskQueue {
   constructor() {
-    this.queue = {
-      pending: [],
-      in_progress: {},
-      completed: [],
-      version: '2.1'
-    };
-    this.globalPaused = false; // 全局暂停状态
+    // 只在内存中维护当前执行状态，不持久化
+    this.executingTasks = new Map(); // projectId -> taskInfo
+    this.globalPaused = false;
   }
 
-  async ensureQueueFile() {
+  /**
+   * 从项目的 dev_state.json 读取 feature_list
+   */
+  async getProjectFeatures(projectId) {
+    const config = getConfig();
+    const project = config.monitored_projects.find(p => p.id === projectId);
+    if (!project) return null;
+
     try {
-      await fs.mkdir(path.dirname(QUEUE_PATH), { recursive: true });
-      await fs.access(QUEUE_PATH);
-      const data = await fs.readFile(QUEUE_PATH, 'utf-8');
-      const loaded = JSON.parse(data);
-      
-      // 迁移旧版本数据
-      if (loaded.version === '2.0' && loaded.in_progress && !loaded.in_progress.project_id) {
-        const oldTask = loaded.in_progress;
-        this.queue = {
-          pending: loaded.pending || [],
-          in_progress: oldTask ? { [oldTask.project_id]: oldTask } : {},
-          completed: loaded.completed || [],
-          version: '2.1'
-        };
-      } else {
-        this.queue = loaded;
-      }
-    } catch (err) {
-      console.error('[TaskQueue] 队列文件解析失败:', err.message);
-      try {
-        const raw = await fs.readFile(QUEUE_PATH, 'utf-8');
-        let repaired = null;
-        for (let i = raw.length; i > 0; i--) {
-          try {
-            repaired = JSON.parse(raw.slice(0, i));
-            break;
-          } catch (_) {}
-        }
-        if (repaired && Array.isArray(repaired.pending) && repaired.in_progress && typeof repaired.in_progress === 'object') {
-          const bak = `${QUEUE_PATH}.corrupt.${Date.now()}`;
-          await fs.copyFile(QUEUE_PATH, bak);
-          console.log(`[TaskQueue] 已备份损坏文件到 ${bak}，并尝试恢复`);
-          if (repaired.version === '2.0' && repaired.in_progress && !repaired.in_progress.project_id) {
-            const oldTask = repaired.in_progress;
-            this.queue = {
-              pending: repaired.pending || [],
-              in_progress: oldTask ? { [oldTask.project_id]: oldTask } : {},
-              completed: repaired.completed || [],
-              version: '2.1'
-            };
-          } else {
-            this.queue = repaired;
-          }
-          await this.save();
-        } else {
-          await this.save();
-        }
-      } catch (e2) {
-        console.error('[TaskQueue] 恢复失败，使用空队列:', e2.message);
-        await this.save();
-      }
-    }
-  }
-
-  async save() {
-    await fs.writeFile(QUEUE_PATH, JSON.stringify(this.queue, null, 2));
-  }
-
-  getProjectInProgress(projectId) {
-    return this.queue.in_progress[projectId] || null;
-  }
-
-  getInProgressCount() {
-    return Object.keys(this.queue.in_progress).length;
-  }
-
-  async addTask(projectId, featureId, feature) {
-    const task = {
-      id: `TASK-${Date.now()}`,
-      project_id: projectId,
-      feature_id: featureId,
-      feature_name: feature.name,
-      feature_desc: feature.description || '',
-      category: feature.category,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      started_at: null,
-      completed_at: null,
-      agent_info: null,
-      error_count: 0,
-      last_error: null,
-      logs: []
-    };
-
-    this.queue.pending.push(task);
-    // 按创建时间排序（FIFO）
-    this.queue.pending.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-
-    await this.save();
-    broadcast('task_added', task);
-    
-    // 如果未暂停，触发自动执行
-    if (!this.globalPaused) {
-      const { getAgentExecutor } = require('./agent-executor');
-      const executor = getAgentExecutor();
-      if (executor) {
-        executor.tryExecute(projectId);
-      }
-    }
-    
-    return task;
-  }
-
-  async claimTask(projectId, agentInfo = {}) {
-    if (this.queue.in_progress[projectId]) {
-      return { error: '该项目已有任务在执行中', current: this.queue.in_progress[projectId] };
-    }
-
-    const taskIndex = this.queue.pending.findIndex(t => t.project_id === projectId);
-    if (taskIndex === -1) {
-      return { error: '该项目的任务队列为空' };
-    }
-
-    const task = this.queue.pending.splice(taskIndex, 1)[0];
-    task.status = 'in_progress';
-    task.started_at = new Date().toISOString();
-    task.agent_info = {
-      ...agentInfo,
-      claimed_at: new Date().toISOString()
-    };
-
-    this.queue.in_progress[projectId] = task;
-    await this.save();
-    await this.updateProjectFeatureStatus(projectId, task.feature_id, 'In_Progress');
-    
-    broadcast('task_started', task);
-    
-    return { success: true, task };
-  }
-
-  async claimAnyTask(agentInfo = {}) {
-    if (this.queue.pending.length === 0) {
-      return { error: '全局队列为空' };
-    }
-
-    const taskIndex = this.queue.pending.findIndex(t => !this.queue.in_progress[t.project_id]);
-    if (taskIndex === -1) {
-      return { error: '所有项目都已有任务在执行中' };
-    }
-
-    const task = this.queue.pending.splice(taskIndex, 1)[0];
-    const projectId = task.project_id;
-    
-    task.status = 'in_progress';
-    task.started_at = new Date().toISOString();
-    task.agent_info = {
-      ...agentInfo,
-      claimed_at: new Date().toISOString()
-    };
-
-    this.queue.in_progress[projectId] = task;
-    await this.save();
-    await this.updateProjectFeatureStatus(projectId, task.feature_id, 'In_Progress');
-    
-    broadcast('task_started', task);
-    
-    return { success: true, task };
-  }
-
-  async completeTask(projectId, result = {}) {
-    if (!this.queue.in_progress[projectId]) {
-      return { error: '该项目没有正在执行的任务' };
-    }
-
-    const task = this.queue.in_progress[projectId];
-    task.status = 'completed';
-    task.completed_at = new Date().toISOString();
-    task.result = result;
-    task.logs.push({
-      time: new Date().toISOString(),
-      action: 'completed',
-      message: result.message || '任务完成'
-    });
-
-    this.queue.completed.unshift(task);
-    if (this.queue.completed.length > 100) {
-      this.queue.completed = this.queue.completed.slice(0, 100);
-    }
-
-    delete this.queue.in_progress[projectId];
-    await this.save();
-    await this.updateProjectFeatureStatus(projectId, task.feature_id, 'Completed');
-    
-    broadcast('task_completed', task);
-    
-    // 如果未暂停，触发下一个任务
-    if (!this.globalPaused) {
-      setTimeout(() => {
-        const { getAgentExecutor } = require('./agent-executor');
-        const executor = getAgentExecutor();
-        if (executor) {
-          executor.tryExecute(projectId);
-        }
-      }, 1000);
-    }
-    
-    return { success: true, task };
-  }
-
-  async reportError(projectId, error, retry = false) {
-    if (!this.queue.in_progress[projectId]) {
-      return { error: '该项目没有正在执行的任务' };
-    }
-
-    const task = this.queue.in_progress[projectId];
-    task.error_count++;
-    task.last_error = error;
-    task.logs.push({
-      time: new Date().toISOString(),
-      action: 'error',
-      message: error,
-      retry_count: task.error_count
-    });
-
-    if (!retry || task.error_count >= 3) {
-      task.status = 'failed';
-      this.queue.completed.unshift(task);
-      delete this.queue.in_progress[projectId];
-      await this.updateProjectFeatureStatus(projectId, task.feature_id, 'Pending');
-      broadcast('task_failed', task);
-      
-      setTimeout(() => {
-        const { getAgentExecutor } = require('./agent-executor');
-        const executor = getAgentExecutor();
-        if (executor) {
-          executor.tryExecute(projectId);
-        }
-      }, 1000);
-    }
-
-    await this.save();
-    return { success: true, task, retry_count: task.error_count };
-  }
-
-  async addLog(projectId, type, message, data = {}) {
-    if (!this.queue.in_progress[projectId]) {
-      return { error: '该项目没有正在执行的任务' };
-    }
-
-    const task = this.queue.in_progress[projectId];
-    const logEntry = {
-      time: new Date().toISOString(),
-      action: 'log',
-      type: type,
-      message: message,
-      ...data
-    };
-
-    task.logs.push(logEntry);
-    if (task.logs.length > 100) {
-      task.logs = task.logs.slice(-100);
-    }
-
-    await this.save();
-    broadcast('task_log', { task_id: task.id, log: logEntry });
-    
-    return { success: true, log: logEntry };
-  }
-
-  getCurrentLogs(projectId) {
-    const task = this.queue.in_progress[projectId];
-    if (!task) {
-      return { has_task: false, logs: [] };
-    }
-    
-    return {
-      has_task: true,
-      task_id: task.id,
-      task_name: task.feature_name,
-      logs: task.logs || []
-    };
-  }
-
-  async updateProjectFeatureStatus(projectId, featureId, status) {
-    try {
-      const config = getConfig();
-      const project = config.monitored_projects.find(p => p.id === projectId);
-      if (!project) {
-        console.error(`[TaskQueue] 项目不存在: ${projectId}`);
-        return;
-      }
-
       const devStatePath = path.join(project.path, 'dev_state.json');
-      
-      let devState;
-      try {
-        const data = await fs.readFile(devStatePath, 'utf-8');
-        devState = JSON.parse(data);
-      } catch (err) {
-        console.error(`[TaskQueue] 读取 dev_state.json 失败: ${err.message}`);
-        return;
-      }
+      const data = await fs.readFile(devStatePath, 'utf-8');
+      const devState = JSON.parse(data);
+      return {
+        features: devState.feature_list || [],
+        context: devState.current_context || {},
+        project
+      };
+    } catch (err) {
+      return { features: [], context: {}, project };
+    }
+  }
 
+  /**
+   * 获取项目的待处理任务（从 dev_state.json 推导）
+   */
+  async getPendingTasks(projectId) {
+    const projectData = await this.getProjectFeatures(projectId);
+    if (!projectData) return [];
+
+    const executingFeatureId = this.executingTasks.get(projectId)?.feature_id;
+    
+    // 待处理列：仅 Pending（不含 Queued）
+    return projectData.features
+      .filter(f => f.status === 'Pending' || !f.status)
+      .filter(f => f.id !== executingFeatureId)
+      .map(f => this._toTaskInfo(projectId, f));
+  }
+
+  _toTaskInfo(projectId, f) {
+    return {
+      id: `TASK-${f.id}`,
+      project_id: projectId,
+      feature_id: f.id,
+      feature_name: f.name,
+      feature_desc: f.description || '',
+      category: f.category || 'Feature',
+      created_at: f.created_at || new Date().toISOString()
+    };
+  }
+
+  /**
+   * 按 feature_list 顺序返回开发队列中的等待项（不含正在执行的那条）
+   */
+  async getQueuedFeaturesInOrder(projectId) {
+    const projectData = await this.getProjectFeatures(projectId);
+    if (!projectData) return [];
+    return (projectData.features || []).filter(f => f.status === STATUS_QUEUED);
+  }
+
+  async saveDevStateFeatureList(project, featureList) {
+    const devStatePath = path.join(project.path, project.key_files?.dev_state || 'dev_state.json');
+    const raw = await fs.readFile(devStatePath, 'utf-8');
+    const devState = JSON.parse(raw);
+    devState.feature_list = featureList;
+    await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+  }
+
+  /**
+   * 从待处理进入开发队列：标为 Queued，并排到「当前开发块」末尾（In_Progress / Queued 之后）
+   */
+  async enqueueFeature(projectId, featureId) {
+    const projectData = await this.getProjectFeatures(projectId);
+    if (!projectData?.project) return { error: '项目不存在' };
+    const project = projectData.project;
+    const features = [...(projectData.features || [])];
+    const idx = features.findIndex(f => f.id === featureId);
+    if (idx === -1) return { error: '功能项不存在' };
+    const f = features[idx];
+    const st = f.status || 'Pending';
+    if (st === 'Completed') return { error: '已完成项不能入队' };
+    if (st === STATUS_QUEUED || st === 'In_Progress') return { success: true, already: true };
+
+    const [item] = features.splice(idx, 1);
+    item.status = STATUS_QUEUED;
+    item.updated_at = new Date().toISOString();
+
+    let insertAt = features.length;
+    for (let i = features.length - 1; i >= 0; i--) {
+      if (features[i].status === STATUS_QUEUED || features[i].status === 'In_Progress') {
+        insertAt = i + 1;
+        break;
+      }
+    }
+    features.splice(insertAt, 0, item);
+
+    await this.saveDevStateFeatureList(project, features);
+    broadcast('feature_updated', { project_id: projectId, feature_id: featureId });
+    return { success: true };
+  }
+
+  /**
+   * 若无执行中且未暂停，认领队列头（第一个 Queued）并返回 task（由调用方 executeTask）
+   */
+  async maybeStartNextFromQueue(projectId, agentInfo = { agent_id: 'queue', agent_name: 'Dev Queue' }) {
+    if (this.executingTasks.has(projectId)) return { started: false };
+    if (this.globalPaused) return { started: false };
+    const claimResult = await this.claimTask(projectId, agentInfo);
+    if (!claimResult.success) return { started: false, ...claimResult };
+    return { started: true, task: claimResult.task };
+  }
+
+  /**
+   * 获取项目状态
+   */
+  async getStatus(projectId = null) {
+    if (projectId) {
+      const projectData = await this.getProjectFeatures(projectId);
+      const features = projectData?.features || [];
+      const executing = this.executingTasks.get(projectId) || null;
+      const pendingCount = features.filter(f => (f.status === 'Pending' || !f.status) && f.id !== executing?.feature_id).length;
+      const queuedCount = features.filter(f => f.status === STATUS_QUEUED).length;
+
+      return {
+        paused: this.globalPaused,
+        pending_count: pendingCount,
+        queued_count: queuedCount,
+        in_progress: executing,
+        executing: executing
+      };
+    }
+
+    // 全局状态
+    let pendingTotal = 0;
+    let queuedTotal = 0;
+    const config = getConfig();
+    
+    for (const project of config.monitored_projects) {
+      if (!project.active) continue;
+      const s = await this.getStatus(project.id);
+      pendingTotal += s.pending_count;
+      queuedTotal += s.queued_count;
+    }
+
+    return {
+      paused: this.globalPaused,
+      pending_count: pendingTotal,
+      queued_count: queuedTotal,
+      executing_count: this.executingTasks.size,
+      executing_tasks: Array.from(this.executingTasks.entries()).map(([pid, task]) => ({
+        project_id: pid,
+        ...task
+      }))
+    };
+  }
+
+  /**
+   * 认领任务 - 更新 dev_state.json 中的状态
+   * @param {object} options.featureId 若指定则认领该功能（须为待处理；或由看板先标为开发中后再认领同一 id）
+   */
+  async claimTask(projectId, agentInfo = {}, options = {}) {
+    const projectData = await this.getProjectFeatures(projectId);
+    if (!projectData) {
+      return { error: '项目不存在' };
+    }
+
+    // 检查是否已有任务在执行
+    if (this.executingTasks.has(projectId)) {
+      return { error: '该项目已有任务在执行中', current: this.executingTasks.get(projectId) };
+    }
+
+    const explicitFeatureId = options.featureId;
+    const features = projectData.features || [];
+    let taskInfo;
+
+    if (explicitFeatureId) {
+      const feature = features.find(f => f.id === explicitFeatureId);
+      if (!feature) {
+        return { error: '功能项不存在' };
+      }
+      const st = feature.status || 'Pending';
+      if (st === 'Completed') {
+        return { error: '已完成的任务无法开始开发' };
+      }
+      if (st !== 'Pending' && st !== STATUS_QUEUED && st !== 'In_Progress') {
+        return { error: '无法认领该状态的任务' };
+      }
+      taskInfo = this._toTaskInfo(projectId, feature);
+    } else {
+      const projectData = await this.getProjectFeatures(projectId);
+      const features = projectData?.features || [];
+      const firstQueued = features.find(f => f.status === STATUS_QUEUED);
+      if (!firstQueued) {
+        return { error: '开发队列为空' };
+      }
+      taskInfo = this._toTaskInfo(projectId, firstQueued);
+    }
+    
+    // 更新 dev_state.json
+    await this.updateFeatureStatus(projectId, taskInfo.feature_id, 'In_Progress', {
+      agent_task_id: taskInfo.id,
+      task_name: taskInfo.feature_name,
+      start_time: new Date().toISOString(),
+      agent_info: agentInfo
+    });
+
+    // 记录到内存
+    this.executingTasks.set(projectId, {
+      ...taskInfo,
+      started_at: new Date().toISOString(),
+      agent_info: agentInfo,
+      error_count: 0,
+      last_error: null
+    });
+
+    broadcast('task_started', { project_id: projectId, task: taskInfo });
+    
+    return { success: true, task: taskInfo };
+  }
+
+  /**
+   * 完成任务
+   */
+  async completeTask(projectId, result = {}) {
+    const executing = this.executingTasks.get(projectId);
+    if (!executing) {
+      return { error: '没有正在执行的任务' };
+    }
+
+    // 更新 dev_state.json
+    await this.updateFeatureStatus(projectId, executing.feature_id, 'Completed', {
+      agent_task_id: null,
+      task_name: '等待指令',
+      in_progress_feature_id: null,
+      start_time: null,
+      last_error: null,
+      trial_count: 0
+    });
+
+    // 添加到 changelog
+    await this.addChangelog(projectId, 'system', `任务完成: ${executing.feature_name}`, result.message || '');
+
+    // 清理内存状态
+    this.executingTasks.delete(projectId);
+
+    broadcast('task_completed', { project_id: projectId, task: executing, result });
+    
+    return { success: true, task: executing };
+  }
+
+  /**
+   * 报告错误
+   */
+  async reportError(projectId, error, retry = true) {
+    const executing = this.executingTasks.get(projectId);
+    if (!executing) {
+      return { error: '没有正在执行的任务' };
+    }
+
+    executing.error_count = (executing.error_count || 0) + 1;
+    executing.last_error = error;
+
+    if (!retry || executing.error_count >= 3) {
+      // 不再重试，重置为 Pending
+      await this.updateFeatureStatus(projectId, executing.feature_id, 'Pending', {
+        agent_task_id: null,
+        task_name: '等待指令',
+        in_progress_feature_id: null,
+        start_time: null,
+        last_error: error,
+        trial_count: executing.error_count
+      });
+
+      await this.addChangelog(projectId, 'error', `任务失败: ${executing.feature_name}`, error);
+
+      this.executingTasks.delete(projectId);
+      
+      broadcast('task_failed', { project_id: projectId, task: executing, error });
+      
+      return { success: true, status: 'failed', task: executing };
+    } else {
+      // 继续重试
+      await this.addChangelog(projectId, 'error', `任务出错(第${executing.error_count}次): ${executing.feature_name}`, error);
+      
+      broadcast('task_error', { project_id: projectId, task: executing, error, retry: true });
+      
+      return { success: true, status: 'retry', task: executing };
+    }
+  }
+
+  /**
+   * 重新入队等待重试（保持 Queued 状态，清理执行内存）
+   */
+  async requeueForRetry(projectId) {
+    const executing = this.executingTasks.get(projectId);
+    if (!executing) return;
+
+    await this.updateFeatureStatus(projectId, executing.feature_id, STATUS_QUEUED, {
+      agent_task_id: null,
+      task_name: '等待重试 (第' + executing.error_count + '次)',
+      start_time: null
+    });
+
+    this.executingTasks.delete(projectId);
+    broadcast('task_queued_for_retry', { project_id: projectId, task: executing });
+  }
+
+  /**
+   * 暂停当前任务（保留在 Queued 队列，停止执行）
+   */
+  async pauseTask(projectId) {
+    const executing = this.executingTasks.get(projectId);
+    if (!executing) {
+      return { error: '没有正在执行的任务' };
+    }
+
+    await this.updateFeatureStatus(projectId, executing.feature_id, STATUS_QUEUED, {
+      agent_task_id: null,
+      task_name: '已暂停',
+      start_time: null
+    });
+
+    await this.addChangelog(projectId, 'system', '任务已暂停: ' + executing.feature_name, '用户手动暂停，保留在队列中');
+
+    this.executingTasks.delete(projectId);
+    broadcast('task_paused', { project_id: projectId, task: executing });
+    return { success: true, task: executing };
+  }
+
+    /**
+   * 停止任务
+   */
+  async stopTask(projectId, reason = '用户手动停止') {
+    const executing = this.executingTasks.get(projectId);
+    if (!executing) {
+      return { error: '没有正在执行的任务' };
+    }
+
+    // 更新 dev_state.json - 重置为 Pending
+    await this.updateFeatureStatus(projectId, executing.feature_id, 'Pending', {
+      agent_task_id: null,
+      task_name: '等待指令',
+      in_progress_feature_id: null,
+      start_time: null,
+      last_error: reason,
+      trial_count: 0
+    });
+
+    await this.addChangelog(projectId, 'system', `任务停止: ${executing.feature_name}`, reason);
+
+    this.executingTasks.delete(projectId);
+    
+    broadcast('task_stopped', { project_id: projectId, task: executing, reason });
+    
+    return { success: true, task: executing };
+  }
+
+  /**
+   * 更新 dev_state.json 中的功能状态
+   */
+  async updateFeatureStatus(projectId, featureId, status, contextUpdate = {}) {
+    const config = getConfig();
+    const project = config.monitored_projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    const devStatePath = path.join(project.path, 'dev_state.json');
+    
+    try {
+      const data = await fs.readFile(devStatePath, 'utf-8');
+      const devState = JSON.parse(data);
+
+      // 更新 feature 状态
       const feature = devState.feature_list?.find(f => f.id === featureId);
       if (feature) {
-        const oldStatus = feature.status;
         feature.status = status;
-        console.log(`[TaskQueue] ${projectId}/${featureId}: ${oldStatus} -> ${status}`);
-      } else {
-        console.warn(`[TaskQueue] 功能项不在 dev_state 看板中: ${projectId}/${featureId}`);
+        feature.updated_at = new Date().toISOString();
       }
 
-      devState.updated_at = new Date().toISOString();
-
-      const inProgressTask = this.queue.in_progress[projectId];
+      // 更新 current_context
       devState.current_context = {
         ...(devState.current_context || {}),
-        agent_task_id: inProgressTask?.id || null,
-        task_name: inProgressTask?.feature_name || '等待指令',
-        trial_count: inProgressTask?.error_count ?? 0,
-        last_error: inProgressTask?.last_error ?? null
+        ...contextUpdate
       };
 
       await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
     } catch (err) {
-      console.error('[TaskQueue] 更新项目状态失败:', err);
+      console.error(`[TaskQueue] 更新 dev_state.json 失败:`, err.message);
     }
   }
 
-  getStatus(projectId = null) {
-    const inProgressMap = this.queue.in_progress || {};
-    
-    if (projectId) {
-      return {
-        paused: this.globalPaused,
-        pending_count: this.queue.pending.filter(t => t.project_id === projectId).length,
-        in_progress: inProgressMap[projectId] || null,
-        completed_count: this.queue.completed.filter(t => t.project_id === projectId).length,
-        queue: {
-          pending: this.queue.pending.filter(t => t.project_id === projectId),
-          in_progress: inProgressMap[projectId] || null,
-          completed: this.queue.completed.filter(t => t.project_id === projectId)
-        }
-      };
-    }
-    
-    return {
-      paused: this.globalPaused,
-      pending_count: this.queue.pending.length,
-      in_progress_count: Object.keys(inProgressMap).length,
-      in_progress: inProgressMap,
-      completed_count: this.queue.completed.length,
-      queue: this.queue
-    };
-  }
+  /**
+   * 添加 changelog
+   */
+  async addChangelog(projectId, type, message, details = '') {
+    const config = getConfig();
+    const project = config.monitored_projects.find(p => p.id === projectId);
+    if (!project) return;
 
-  async checkStalledTasks() {
-    const stalled = [];
-    const now = new Date();
-    const inProgressMap = this.queue.in_progress || {};
+    const devStatePath = path.join(project.path, 'dev_state.json');
     
-    for (const [projectId, task] of Object.entries(inProgressMap)) {
-      const startedAt = new Date(task.started_at);
-      const elapsedMinutes = (now - startedAt) / 1000 / 60;
-      
-      if (elapsedMinutes > 30) {
-        console.log(`[TaskMonitor] 检测到卡死任务: ${projectId}/${task.feature_name} (${elapsedMinutes.toFixed(1)}分钟)`);
-        stalled.push({ projectId, task });
+    try {
+      const data = await fs.readFile(devStatePath, 'utf-8');
+      const devState = JSON.parse(data);
+
+      devState.changelog = devState.changelog || [];
+      devState.changelog.unshift({
+        id: `LOG${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        type,
+        message,
+        details: details.substring(0, 200)
+      });
+
+      // 只保留最近 50 条
+      if (devState.changelog.length > 50) {
+        devState.changelog = devState.changelog.slice(0, 50);
       }
+
+      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+    } catch (err) {
+      console.error(`[TaskQueue] 添加 changelog 失败:`, err.message);
     }
-    
-    return stalled;
   }
 
-  async resetProjectTask(projectId, reason) {
-    if (!this.queue.in_progress[projectId]) return null;
-    
-    const task = this.queue.in_progress[projectId];
-    task.status = 'pending';
-    task.started_at = null;
-    task.agent_info = null;
-    task.logs.push({
-      time: new Date().toISOString(),
-      action: 'reset',
-      message: `任务被重置: ${reason}`
-    });
-    
-    this.queue.pending.unshift(task);
-    delete this.queue.in_progress[projectId];
-    await this.save();
-    
-    await this.updateProjectFeatureStatus(projectId, task.feature_id, 'Pending');
-    broadcast('task_reset', { task, reason });
-    
-    console.log(`[TaskMonitor] ${projectId} 任务已重置: ${task.feature_name}`);
-    return task;
+  /**
+   * 获取执行中任务信息（用于 AgentExecutor）
+   */
+  getExecutingTask(projectId) {
+    return this.executingTasks.get(projectId) || null;
   }
 
-  // ========== 暂停控制 ==========
-
-  isPaused() {
-    return this.globalPaused;
-  }
-
-  async setPaused(paused) {
+  /**
+   * 暂停/恢复
+   */
+  setPaused(paused) {
     this.globalPaused = paused;
-    broadcast('pause_state_changed', { paused: this.globalPaused });
-    console.log(`[TaskQueue] 全局暂停状态: ${paused ? '已暂停' : '已恢复'}`);
+    broadcast('pause_changed', { paused });
     return { paused: this.globalPaused };
   }
 
-  async stopTask(projectId, reason = '用户手动停止') {
-    const task = this.queue.in_progress[projectId];
-    if (!task) {
-      return { error: '该项目没有正在执行的任务' };
-    }
-
-    // 停止 Agent 执行
-    const { getAgentExecutor } = require('./agent-executor');
-    const executor = getAgentExecutor();
-    if (executor) {
-      executor.stop(projectId);
-    }
-
-    // 将任务移回 pending
-    task.status = 'pending';
-    task.started_at = null;
-    task.agent_info = null;
-    task.logs.push({
-      time: new Date().toISOString(),
-      action: 'stopped',
-      message: `任务被停止: ${reason}`
-    });
-
-    this.queue.pending.unshift(task);
-    delete this.queue.in_progress[projectId];
-    await this.save();
-
-    await this.updateProjectFeatureStatus(projectId, task.feature_id, 'Pending');
-    broadcast('task_stopped', { task, reason });
-
-    console.log(`[TaskQueue] ${projectId} 任务已停止: ${task.feature_name}`);
-    return { success: true, task };
-  }
-
-  async stopAllTasks(reason = '用户手动停止所有任务') {
-    const results = [];
-    for (const projectId of Object.keys(this.queue.in_progress)) {
-      results.push(await this.stopTask(projectId, reason));
-    }
-    return { stopped: results.length, results };
+  isPaused() {
+    return this.globalPaused;
   }
 }
 

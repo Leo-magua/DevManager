@@ -55,12 +55,12 @@
           </div>
         </div>
         <div class="flex items-center gap-4">
-          <select id="project-selector" onchange="switchProject(this.value)" class="appearance-none bg-dark-800 border border-dark-600 text-white text-sm rounded-lg px-4 py-2 pr-8 focus:border-accent focus:outline-none cursor-pointer">
-            <option value="">选择项目...</option>
-          </select>
+          <button id="project-selector-btn" onclick="openProjectListModal()" class="flex items-center gap-2 px-4 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors min-w-[140px]">
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+            <span id="current-project-name">选择项目...</span>
+          </button>
           <button onclick="openScanModal()" class="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors" title="扫描项目目录">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-            <span class="hidden sm:inline">扫描</span>
           </button>
           <button onclick="openSettingsModal()" class="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors" title="API设置">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -77,49 +77,6 @@
   </nav>
 
   <main class="pt-20 pb-8 px-6 max-w-7xl mx-auto">
-    <!-- 全局任务队列状态 -->
-    <section id="queue-status" class="mb-6 hidden animate-fade-in">
-      <div class="glass rounded-xl p-4 border border-dark-600">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-6">
-            <div class="flex items-center gap-2">
-              <span class="w-3 h-3 rounded-full bg-amber-500"></span>
-              <span class="text-sm text-gray-400">待处理: <span id="queue-pending" class="text-white font-medium">0</span></span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></span>
-              <span class="text-sm text-gray-400">开发中: <span id="queue-active" class="text-white font-medium">0</span></span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
-              <span class="text-sm text-gray-400">已完成: <span id="queue-completed" class="text-white font-medium">0</span></span>
-            </div>
-            <!-- 暂停状态指示器 -->
-            <div id="pause-indicator" class="hidden flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 border border-red-500/30">
-              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              <span class="text-xs text-red-400 font-medium">已暂停</span>
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <!-- 暂停/继续按钮 -->
-            <button id="pause-btn" onclick="togglePause()" class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-500 transition-colors flex items-center gap-1.5">
-              <svg id="pause-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-              <span id="pause-text">暂停</span>
-            </button>
-            <!-- 停止当前任务按钮 -->
-            <button id="stop-task-btn" onclick="stopCurrentTask()" class="hidden px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded border border-red-500/30 transition-colors flex items-center gap-1.5">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
-              <span>停止任务</span>
-            </button>
-            <button onclick="refreshAllData()" class="text-xs text-accent hover:text-accent-dark transition-colors flex items-center gap-1 px-2">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-              刷新
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <!-- 空状态 -->
     <section id="empty-state" class="mb-6 animate-fade-in">
       <div class="glass rounded-xl p-10 border border-dark-600 text-center">
@@ -134,48 +91,23 @@
       </div>
     </section>
 
-    <!-- 项目信息 -->
+    <!-- 项目信息 + 扫描 / 部署（与项目切换同区展示） -->
     <section id="project-header" class="mb-6 hidden animate-fade-in">
       <div class="glass rounded-xl p-5 border border-dark-600">
-        <div class="flex items-start justify-between">
-          <div>
-            <div class="flex items-center gap-3 mb-2">
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-3 mb-2 flex-wrap">
               <h2 id="project-name" class="text-xl font-bold text-white">--</h2>
               <span id="project-tech" class="text-xs text-gray-500"></span>
             </div>
             <p id="project-desc" class="text-sm text-gray-400">--</p>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Agent执行状态 -->
-    <section id="agent-section" class="mb-6 hidden animate-fade-in">
-      <div id="agent-card" class="glass rounded-xl p-5 border border-dark-600">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-            Agent 执行状态
-          </h3>
-          <span id="agent-badge" class="px-2 py-1 text-xs rounded bg-gray-500/20 text-gray-400 border border-gray-500/30">空闲</span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="bg-dark-800 rounded-lg p-4 border border-dark-600">
-            <div class="text-xs text-gray-500 mb-1">当前任务</div>
-            <div id="current-task" class="text-white font-medium truncate">等待指令...</div>
+          <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <button type="button" onclick="openDeployModal()" class="flex items-center gap-1.5 px-3 py-2 bg-dark-700 border border-dark-500 hover:border-accent text-white text-xs rounded-lg transition-colors" title="Nginx 与部署服务">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+              部署管理
+            </button>
           </div>
-          <div class="bg-dark-800 rounded-lg p-4 border border-dark-600">
-            <div class="text-xs text-gray-500 mb-1">任务ID</div>
-            <div id="task-id" class="text-accent font-mono text-sm truncate">--</div>
-          </div>
-          <div class="bg-dark-800 rounded-lg p-4 border border-dark-600">
-            <div class="text-xs text-gray-500 mb-1">试错次数</div>
-            <div id="trial-count" class="text-white font-medium">0 次</div>
-          </div>
-        </div>
-        <div id="error-box" class="hidden mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-          <div class="text-xs text-red-400 font-medium mb-1">上次错误</div>
-          <div id="last-error" class="text-sm text-red-300 font-mono"></div>
         </div>
       </div>
     </section>
@@ -196,18 +128,45 @@
       </div>
     </section>
 
-    <!-- 项目部署管理 -->
-    <section id="deployment-manager" class="mb-6 hidden animate-fade-in">
-      <div class="glass rounded-xl p-5 border border-dark-600">
+    <!-- 项目列表弹窗 -->
+    <div id="project-list-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div class="glass rounded-xl p-6 border border-dark-600 max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+          <h3 class="text-lg font-medium text-white flex items-center gap-2">
+            <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+            选择项目
+          </h3>
+          <div class="flex items-center gap-2">
+            <button onclick="openScanModal()" class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-500 transition-colors flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              扫描
+            </button>
+            <button onclick="closeProjectListModal()" class="text-gray-400 hover:text-white">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+        </div>
+        <div id="project-list-content" class="flex-1 overflow-y-auto space-y-2">
+          <div class="text-sm text-gray-500 italic">加载中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 项目部署管理弹窗 -->
+    <div id="deploy-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div class="glass rounded-xl p-6 border border-dark-600 max-w-4xl w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-medium text-white flex items-center gap-2">
+            <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
             项目部署管理
           </h3>
           <div class="flex items-center gap-2">
-            <button onclick="loadDeploymentStatus()" class="text-xs text-accent hover:text-accent-dark transition-colors flex items-center gap-1">
+            <button onclick="loadDeploymentStatus()" class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-white rounded border border-dark-500 transition-colors flex items-center gap-1">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
               刷新
+            </button>
+            <button onclick="closeDeployModal()" class="text-gray-400 hover:text-white">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
           </div>
         </div>
@@ -236,19 +195,54 @@
         </div>
 
         <!-- 项目部署列表 -->
-        <div id="deployment-list" class="space-y-3">
+        <div id="deployment-list" class="space-y-3 flex-1 overflow-y-auto">
           <div class="text-sm text-gray-500 italic">加载中...</div>
         </div>
       </div>
-    </section>
+    </div>
 
-    <!-- 功能看板 -->
+    <!-- 功能看板 + 队列状态（合并） -->
     <section id="feature-board" class="mb-6 hidden animate-fade-in">
       <div class="glass rounded-xl p-5 border border-dark-600">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider">功能任务看板</h3>
-          <div class="flex gap-2 text-xs">
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span>点击卡片开始开发</span>
+        <div class="flex flex-col gap-3 mb-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider">功能与队列看板</h3>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button type="button" onclick="bulkBoardAction('pending_to_progress')" class="px-2 py-1.5 text-[11px] bg-amber-500/15 text-amber-300 rounded border border-amber-500/30 hover:bg-amber-500/25 transition-colors" title="全部进入开发队列并按列表顺序启动队首">待处理→队列</button>
+              <button type="button" onclick="bulkBoardAction('progress_to_pending')" class="px-2 py-1.5 text-[11px] bg-blue-500/15 text-blue-300 rounded border border-blue-500/30 hover:bg-blue-500/25 transition-colors">队列→待处理</button>
+              <button type="button" onclick="bulkBoardAction('pause_in_progress')" class="px-2 py-1.5 text-[11px] bg-red-500/15 text-red-300 rounded border border-red-500/30 hover:bg-red-500/25 transition-colors">暂停开发中</button>
+              <button type="button" onclick="refreshAllData()" class="px-2 py-1.5 text-[11px] text-accent hover:text-accent-dark border border-accent/30 rounded transition-colors flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                刷新
+              </button>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm px-3 py-2 rounded-lg bg-dark-800/60 border border-dark-600">
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-amber-500 shrink-0"></span>
+              <span class="text-gray-400">待处理 <span id="queue-pending" class="text-white font-medium">0</span></span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
+              <span class="text-gray-400">开发队列 <span id="queue-active" class="text-white font-medium">0</span></span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-emerald-500 shrink-0"></span>
+              <span class="text-gray-400">已完成 <span id="queue-completed" class="text-white font-medium">0</span></span>
+            </div>
+            <div id="pause-indicator" class="hidden flex items-center gap-2 px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/30">
+              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+              <span class="text-xs text-red-400 font-medium">队列已暂停</span>
+            </div>
+            <div class="flex items-center gap-2 ml-auto flex-wrap">
+              <button id="pause-btn" onclick="togglePause()" class="px-2.5 py-1 text-[11px] bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-500 transition-colors flex items-center gap-1">
+                <svg id="pause-icon" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span id="pause-text">暂停</span>
+              </button>
+              <button id="stop-task-btn" onclick="stopCurrentTask()" class="hidden px-2.5 py-1 text-[11px] bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded border border-red-500/30 transition-colors flex items-center gap-1">
+                <span>停止任务</span>
+              </button>
+            </div>
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -266,7 +260,7 @@
           </div>
           <div class="bg-dark-800/50 rounded-lg p-3 border border-dark-600">
             <div class="text-xs font-medium text-blue-400 mb-3 flex items-center justify-between">
-              <span>开发中</span>
+              <span>开发队列</span>
               <span id="count-progress" class="bg-blue-500/20 px-1.5 py-0.5 rounded">0</span>
             </div>
             <div id="col-progress" class="space-y-2 min-h-[100px]"></div>
@@ -301,8 +295,12 @@
             <button onclick="restartXterm()" class="px-2 py-1 text-xs text-accent hover:text-accent-dark transition-colors">
               重连
             </button>
-            <button onclick="sendCtrlC()" class="px-2 py-1 text-xs text-amber-500 hover:text-amber-400 transition-colors">
+            <button onclick="sendCtrlC()" class="px-2 py-1 text-xs text-amber-500 hover:text-amber-400 transition-colors" title="发送 Ctrl+C 中断信号">
               Ctrl+C
+            </button>
+            <button id="terminal-stop-btn" onclick="forceStopTerminalTask()" class="hidden px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30 rounded transition-colors flex items-center gap-1.5 font-medium" title="强制停止当前任务（Esc 键快捷）">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+              <span>强制停止</span>
             </button>
           </div>
         </div>
@@ -325,49 +323,8 @@
       </div>
     </section>
 
-    <!-- 底部区域：NLP输入 + 日志 -->
-    <div id="bottom-sections" class="grid grid-cols-1 lg:grid-cols-2 gap-6 hidden">
-      <!-- 自然语言需求输入 -->
-      <section class="animate-fade-in">
-        <div class="glass rounded-xl p-5 border border-dark-600 h-full">
-          <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider flex items-center gap-2 mb-4">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
-            自然语言需求输入
-          </h3>
-          <p class="text-xs text-gray-500 mb-3">用自然语言描述需求，AI会自动解析并创建任务</p>
-          
-          <form id="nlp-form" class="space-y-3 mb-4">
-            <textarea id="nlp-input" rows="4" placeholder="例如：添加一个暗黑模式切换功能，放在页面右上角，可以记住用户的选择..."
-              class="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white placeholder-gray-600 focus:border-accent focus:outline-none resize-none"></textarea>
-            
-            <div class="flex items-center gap-3">
-              <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                <input type="checkbox" id="nlp-auto-start" class="rounded bg-dark-800 border-dark-600 text-accent">
-                自动开始开发
-              </label>
-              <button type="button" onclick="parseNLP()" class="ml-auto px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded transition-colors">
-                预览解析结果
-              </button>
-            </div>
-            
-            <button type="submit" class="w-full py-2 bg-accent hover:bg-accent-dark text-dark-900 font-medium rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-              提交需求
-            </button>
-          </form>
-
-          <!-- 解析结果预览 -->
-          <div id="nlp-preview" class="hidden p-3 bg-dark-800 rounded border border-dark-600">
-            <div class="text-xs text-gray-500 mb-2">解析结果预览：</div>
-            <div class="space-y-1 text-sm">
-              <div class="flex justify-between"><span class="text-gray-400">标题:</span> <span id="preview-title" class="text-white"></span></div>
-              <div class="flex justify-between"><span class="text-gray-400">类别:</span> <span id="preview-category" class="text-white"></span></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 日志 -->
+    <!-- 底部区域：开发日志 -->
+    <div id="bottom-sections" class="hidden">
       <section class="animate-fade-in">
         <div class="glass rounded-xl p-5 border border-dark-600 h-full">
           <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider flex items-center gap-2 mb-4">
@@ -380,18 +337,29 @@
     </div>
   </main>
 
-  <!-- 开始开发确认弹窗 -->
+  <!-- 任务详情 / 开始开发 -->
   <div id="start-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-    <div class="glass rounded-xl p-6 border border-dark-600 max-w-md w-full mx-4">
-      <h3 class="text-lg font-medium text-white mb-2">开始开发</h3>
-      <p class="text-sm text-gray-400 mb-4">确定要开始开发这个功能吗？Agent将认领此任务并开始实际编码。</p>
-      <div id="modal-task-info" class="p-3 bg-dark-800 rounded border border-dark-600 mb-4">
-        <div class="text-sm text-white font-medium" id="modal-task-name">--</div>
-        <div class="text-xs text-gray-500" id="modal-task-id">--</div>
+    <div class="glass rounded-xl p-6 border border-dark-600 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <h3 id="modal-title" class="text-lg font-medium text-white mb-2">任务详情</h3>
+      <p id="modal-subtitle" class="text-sm text-gray-400 mb-4">可修改需求内容；待处理任务可在此开始开发。</p>
+      <div class="space-y-3 mb-4">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">任务 ID</label>
+          <div id="modal-task-id" class="text-xs text-accent font-mono">--</div>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">标题</label>
+          <input type="text" id="modal-task-title" class="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">需求描述</label>
+          <textarea id="modal-task-desc" rows="5" class="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white placeholder-gray-600 focus:border-accent focus:outline-none resize-none"></textarea>
+        </div>
       </div>
-      <div class="flex gap-3">
-        <button onclick="closeModal()" class="flex-1 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg text-sm transition-colors">取消</button>
-        <button onclick="confirmStartTask()" class="flex-1 py-2 bg-accent hover:bg-accent-dark text-dark-900 font-medium rounded-lg text-sm transition-colors">开始开发</button>
+      <div class="flex flex-wrap gap-2 justify-end">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg text-sm transition-colors">取消</button>
+        <button type="button" id="modal-btn-save-only" onclick="saveFeatureFromModal()" class="hidden px-4 py-2 bg-dark-600 hover:bg-dark-500 text-white rounded-lg text-sm transition-colors">保存修改</button>
+        <button type="button" id="modal-btn-start" onclick="confirmStartTask()" class="px-4 py-2 bg-accent hover:bg-accent-dark text-dark-900 font-medium rounded-lg text-sm transition-colors">开始开发</button>
       </div>
     </div>
   </div>
@@ -610,14 +578,23 @@
     let currentProject = null;
     let projects = [];
     let selectedFeature = null;
+    let featureModalMode = 'start';
     let autoRefreshInterval = null;
 
     const statusMap = {
       'Pending': { label: '待处理', class: 'border-amber-500/30 bg-amber-500/10 text-amber-400', col: 'col-pending' },
-      'In_Progress': { label: '开发中', class: 'border-blue-500/30 bg-blue-500/10 text-blue-400', col: 'col-progress' },
+      'Queued': { label: '排队中', class: 'border-violet-500/30 bg-violet-500/10 text-violet-300', col: 'col-progress' },
+      'In_Progress': { label: '执行中', class: 'border-red-500/40 bg-red-500/10 text-red-300', col: 'col-progress' },
       'Completed': { label: '已完成', class: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400', col: 'col-completed' }
     };
 
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
 
 
     // ========== 终端输入处理 ==========
@@ -625,16 +602,29 @@
       if (event.key === 'Enter') {
         const input = document.getElementById('terminal-input');
         const command = input.value.trim();
-        if (command && currentProject && devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
-          // 发送命令到终端
-          devmanSocket.send(JSON.stringify({
-            type: 'terminal_input',
-            project_id: currentProject,
-            data: command + '\r'
-          }));
-          // 清空输入框
-          input.value = '';
+        
+        if (!command) return;
+        
+        if (!currentProject) {
+          showToast('请先选择项目', 'warning');
+          return;
         }
+        
+        if (!devmanSocket || devmanSocket.readyState !== WebSocket.OPEN) {
+          showToast('WebSocket 未连接', 'error');
+          return;
+        }
+        
+        // 发送命令到终端
+        console.log(`[终端输入] 发送命令到 ${currentProject}: ${command}`);
+        devmanSocket.send(JSON.stringify({
+          type: 'terminal_input',
+          project_id: currentProject,
+          data: command + '\r'
+        }));
+        
+        // 清空输入框
+        input.value = '';
       }
     }
 
@@ -852,6 +842,16 @@
       document.getElementById('settings-modal').classList.add('hidden');
     }
 
+    // ========== 部署管理弹窗 ==========
+    function openDeployModal() {
+      document.getElementById('deploy-modal').classList.remove('hidden');
+      loadDeploymentStatus();
+    }
+
+    function closeDeployModal() {
+      document.getElementById('deploy-modal').classList.add('hidden');
+    }
+
     function toggleApiKeyVisibility() {
       const input = document.getElementById('settings-api-key');
       const icon = document.getElementById('eye-icon');
@@ -908,8 +908,19 @@
     // 初始化
     document.addEventListener('DOMContentLoaded', () => {
       loadProjects();
-      document.getElementById('nlp-form').addEventListener('submit', submitNLP);
       connectWebSocket();
+      
+      // ESC 键快捷停止（当终端执行中时）
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const stopBtn = document.getElementById('terminal-stop-btn');
+          // 只有当停止按钮可见（即有任务在执行）时才响应
+          if (stopBtn && !stopBtn.classList.contains('hidden')) {
+            e.preventDefault();
+            forceStopTerminalTask();
+          }
+        }
+      });
     });
 
     let devmanSocket = null;
@@ -955,20 +966,38 @@
               return;
             }
             
-            // 任务状态变更
-            if (!currentProject) return;
-            if (['status', 'task_added', 'task_started', 'task_completed', 'task_failed', 'task_log', 'task_reset'].includes(t)) {
-              // 节流：500ms 内只处理一次
+            // 终端错误
+            if (t === 'terminal_error') {
+              console.warn(`[终端错误] ${msg.project_id}: ${msg.error}`);
+              if (msg.project_id === currentProject) {
+                showToast(msg.error || '终端操作失败', 'warning');
+              }
+              return;
+            }
+            
+            const refreshTypes = ['status', 'task_added', 'task_started', 'task_completed', 'task_failed', 'task_log', 'task_reset', 'task_stopped', 'pause_changed', 'features_bulk', 'feature_updated', 'feature_deleted', 'feature_created', 'features_batch_created'];
+            if (refreshTypes.includes(t)) {
               if (wsThrottleTimer) clearTimeout(wsThrottleTimer);
               wsThrottleTimer = setTimeout(() => {
-                refreshAllData();
-                fetchTerminalLogs();
-              }, 500);
+                if (currentProject) {
+                  refreshAllData();
+                  fetchTerminalLogs();
+                }
+              }, 400);
               
-              // 新任务开始时，重置终端
               if (t === 'task_started' && msg.data?.project_id === currentProject) {
                 if (!term) initXterm();
+                else {
+                  try { term.reset(); term.clear(); } catch (_) {}
+                }
                 terminalOffset = 0;
+                if (devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
+                  devmanSocket.send(JSON.stringify({
+                    type: 'subscribe_terminal',
+                    project_id: currentProject,
+                    offset: 0
+                  }));
+                }
               }
             }
           } catch (_) {}
@@ -988,18 +1017,123 @@
         const res = await fetch(`${API_BASE}/api/projects`);
         const data = await res.json();
         projects = data.projects || [];
-        
-        const selector = document.getElementById('project-selector');
-        selector.innerHTML = '<option value="">选择项目...</option>';
-        
-        projects.forEach(p => {
-          const option = document.createElement('option');
-          option.value = p.id;
-          option.textContent = `${p.name} ${p.active === false ? '(停用)' : ''}`;
-          selector.appendChild(option);
-        });
+        // 项目列表已通过项目列表弹窗动态加载
       } catch (err) {
         showToast('加载项目列表失败', 'error');
+      }
+    }
+
+    // 项目列表弹窗
+    async function openProjectListModal() {
+      document.getElementById('project-list-modal').classList.remove('hidden');
+      await renderProjectList();
+    }
+
+    function closeProjectListModal() {
+      document.getElementById('project-list-modal').classList.add('hidden');
+    }
+
+    // 渲染项目列表（带部署按钮）
+    async function renderProjectList() {
+      const container = document.getElementById('project-list-content');
+      container.innerHTML = '<div class="text-sm text-gray-500 italic">加载中...</div>';
+      
+      try {
+        // 获取项目列表
+        const res = await fetch(`${API_BASE}/api/projects`);
+        const data = await res.json();
+        const projectList = data.projects || [];
+        
+        // 获取部署状态
+        const deployRes = await fetch(`${API_BASE}/api/nginx/deploy-configs`);
+        const deployData = await deployRes.json();
+        const deployConfigs = deployData.configs || [];
+        
+        const deployStatusPromises = deployConfigs.map(async (config) => {
+          try {
+            const statusRes = await fetch(`${API_BASE}/api/deploy/${config.project_id}/status`);
+            return await statusRes.json();
+          } catch {
+            return { project_id: config.project_id, running: false };
+          }
+        });
+        const deployStatuses = await Promise.all(deployStatusPromises);
+        
+        if (projectList.length === 0) {
+          container.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">暂无项目，请先扫描项目目录</div>';
+          return;
+        }
+        
+        container.innerHTML = '';
+        projectList.forEach(p => {
+          const isCurrent = p.id === currentProject;
+          const deployConfig = deployConfigs.find(c => c.project_id === p.id);
+          const deployStatus = deployStatuses.find(s => s.project_id === p.id);
+          const isRunning = deployStatus?.running || false;
+          
+          const item = document.createElement('div');
+          item.className = `p-3 rounded-lg border cursor-pointer transition-all ${isCurrent ? 'bg-accent/10 border-accent/50' : 'bg-dark-800 border-dark-600 hover:border-dark-500'}`;
+          
+          let deployBtn = '';
+          if (deployConfig) {
+            if (isRunning) {
+              deployBtn = `<button onclick="event.stopPropagation(); deployProjectAction('${p.id}', 'stop')" class="w-8 h-8 rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/30 border border-red-500/25 flex items-center justify-center transition-colors" title="停止">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" /></svg>
+              </button>`;
+            } else {
+              deployBtn = `<button onclick="event.stopPropagation(); deployProjectAction('${p.id}', 'start')" class="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/25 flex items-center justify-center transition-colors" title="启动">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              </button>`;
+            }
+          }
+          
+          const statusDot = isCurrent ? '<span class="w-2 h-2 rounded-full bg-accent"></span>' : '';
+          
+          item.innerHTML = `
+            <div class="flex items-center gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  ${statusDot}
+                  <span class="text-sm font-medium text-white truncate">${p.name}</span>
+                  ${p.active === false ? '<span class="text-[10px] text-gray-500">(停用)</span>' : ''}
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">${(p.tech_stack || []).join(' · ') || '未识别'}</div>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                ${deployBtn}
+              </div>
+            </div>
+          `;
+          
+          // 点击空白处切换项目
+          item.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            closeProjectListModal();
+            switchProject(p.id);
+          });
+          
+          container.appendChild(item);
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="text-sm text-red-400 text-center py-8">加载失败: ${err.message}</div>`;
+      }
+    }
+
+    // 项目部署操作
+    async function deployProjectAction(projectId, action) {
+      try {
+        showToast(`${action === 'start' ? '启动' : '停止'}项目 ${projectId}...`, 'info');
+        const res = await fetch(`${API_BASE}/api/deploy/${projectId}/${action}`, { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.success) {
+          showToast(data.message, 'success');
+          renderProjectList(); // 刷新列表
+        } else {
+          showToast(data.error || '操作失败', 'error');
+        }
+      } catch (err) {
+        showToast('操作失败: ' + err.message, 'error');
       }
     }
 
@@ -1007,6 +1141,7 @@
     async function switchProject(projectId) {
       if (!projectId) {
         hideDashboard();
+        document.getElementById('current-project-name').textContent = '选择项目...';
         return;
       }
       
@@ -1020,13 +1155,32 @@
       currentProject = projectId;
       terminalOffset = 0;
       
-      // 清空终端
+      // 更新顶部项目名称显示
+      const project = projects.find(p => p.id === projectId);
+      if (project) {
+        document.getElementById('current-project-name').textContent = project.name;
+      }
+      
+      // 清空终端并重置
       if (term) {
         term.clear();
+        term.reset();
+      } else {
+        initXterm();
       }
       
       await refreshAllData();
       showDashboard();
+      
+      // 重新订阅新项目的终端
+      if (devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
+        devmanSocket.send(JSON.stringify({
+          type: 'subscribe_terminal',
+          project_id: currentProject,
+          offset: 0
+        }));
+        console.log(`[切换项目] 订阅终端: ${currentProject}`);
+      }
     }
 
     // xterm.js 终端
@@ -1126,20 +1280,86 @@
       }
     }
 
-    // 兼容旧代码的 fetchTerminalLogs（现在使用 WebSocket 推送）
-    async function fetchTerminalLogs() {
-      // 仅用于更新状态指示器
+    // 强制停止终端任务（Ctrl+C + API 停止）
+    async function forceStopTerminalTask() {
+      if (!currentProject) {
+        showToast('请先选择一个项目', 'warning');
+        return;
+      }
+      
+      if (!confirm('确定要强制停止当前任务吗？\n\n这将：\n1. 发送中断信号到运行中的进程\n2. 重置任务状态为待处理\n3. 清理执行状态')) {
+        return;
+      }
+      
+      // 1. 先发送 Ctrl+C
+      sendCtrlC();
+      
+      // 2. 调用 executor/stop 杀死进程
       try {
-        const res = await fetch(`${API_BASE}/api/terminal/${currentProject}`);
+        await fetch(`${API_BASE}/api/executor/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: currentProject })
+        });
+      } catch (e) {
+        console.log('[forceStop] executor/stop 失败:', e.message);
+      }
+      
+      // 3. 调用 queue/stop 重置任务状态
+      try {
+        const res = await fetch(`${API_BASE}/api/queue/${currentProject}/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: '用户在终端强制停止' })
+        });
         const data = await res.json();
         
+        if (data.success) {
+          showToast('任务已强制停止', 'success');
+        } else {
+          showToast(data.error || '停止任务失败', 'error');
+        }
+      } catch (err) {
+        showToast('停止失败: ' + err.message, 'error');
+      }
+      
+      // 4. 刷新数据
+      setTimeout(() => refreshAllData(), 500);
+    }
+
+    // 兼容旧代码的 fetchTerminalLogs（现在使用 WebSocket 推送）
+    async function fetchTerminalLogs() {
+      // 更新终端状态指示器和任务信息
+      try {
+        const [terminalRes, queueRes] = await Promise.all([
+          fetch(`${API_BASE}/api/terminal/${currentProject}`),
+          fetch(`${API_BASE}/api/queue`)
+        ]);
+        
+        const terminalData = await terminalRes.json();
+        const queueData = await queueRes.json();
+        
         const statusEl = document.getElementById('terminal-status');
-        if (data.active) {
-          statusEl.textContent = '执行中';
+        const stopBtn = document.getElementById('terminal-stop-btn');
+        
+        // 获取当前项目的执行中任务
+        const executingTask = queueData.executing_tasks?.find(t => t.project_id === currentProject);
+        let taskName = '';
+        if (executingTask && executingTask.feature_name) {
+          taskName = executingTask.feature_name.substring(0, 15) + (executingTask.feature_name.length > 15 ? '...' : '');
+        }
+        
+        if (terminalData.active || executingTask) {
+          const statusText = taskName ? `执行: ${taskName}` : '执行中';
+          statusEl.textContent = statusText;
           statusEl.className = 'ml-2 px-2 py-0.5 text-[10px] rounded bg-accent/20 text-accent animate-pulse';
+          // 显示强制停止按钮
+          if (stopBtn) stopBtn.classList.remove('hidden');
         } else {
           statusEl.textContent = '等待中';
           statusEl.className = 'ml-2 px-2 py-0.5 text-[10px] rounded bg-gray-700 text-gray-400';
+          // 隐藏强制停止按钮
+          if (stopBtn) stopBtn.classList.add('hidden');
         }
       } catch (err) {
         // 静默失败
@@ -1148,17 +1368,12 @@
 
     function showDashboard() {
       document.getElementById('empty-state').classList.add('hidden');
-      document.getElementById('queue-status').classList.remove('hidden');
       document.getElementById('project-header').classList.remove('hidden');
-      document.getElementById('agent-section').classList.remove('hidden');
-      document.getElementById('deployment-manager').classList.remove('hidden');
       // deploy-section 根据数据动态显示
       document.getElementById('feature-board').classList.remove('hidden');
       document.getElementById('terminal-section').classList.remove('hidden');
       document.getElementById('bottom-sections').classList.remove('hidden');
-      
-      // 加载部署状态
-      loadDeploymentStatus();
+      // deployment-manager 改为弹窗形式，不在主页面显示
       
       // 初始化 xterm
       if (!term) {
@@ -1183,14 +1398,12 @@
 
     function hideDashboard() {
       document.getElementById('empty-state').classList.remove('hidden');
-      document.getElementById('queue-status').classList.add('hidden');
       document.getElementById('project-header').classList.add('hidden');
-      document.getElementById('agent-section').classList.add('hidden');
       document.getElementById('deploy-section').classList.add('hidden');
-      document.getElementById('deployment-manager').classList.add('hidden');
       document.getElementById('feature-board').classList.add('hidden');
       document.getElementById('terminal-section').classList.add('hidden');
       document.getElementById('bottom-sections').classList.add('hidden');
+      document.getElementById('current-project-name').textContent = '选择项目...';
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     }
 
@@ -1230,39 +1443,40 @@
 
     // 渲染队列状态（与功能看板保持一致）
     function renderGlobalQueueStatus(globalQueue, projectQueue, featureList = []) {
-      // 从 feature_list 统计数量（与功能看板保持一致）
-      const stats = { Pending: 0, In_Progress: 0, Completed: 0 };
-      
-      // 合并 feature_list 和队列中的活跃任务
       const list = [...(featureList || [])];
-      const live = projectQueue.in_progress;
-      
-      if (live && live.feature_id) {
-        const idx = list.findIndex(f => f.id === live.feature_id);
+      const live = projectQueue.executing;
+      const execId = live && live.feature_id;
+
+      if (execId) {
+        const idx = list.findIndex(f => f.id === execId);
         if (idx === -1) {
-          // 队列中有任务但 feature_list 中没有，添加一个临时条目
           list.push({
             id: live.feature_id,
+            name: live.feature_name,
             status: 'In_Progress'
           });
         } else {
-          // 确保 feature_list 中的状态与队列一致
           list[idx] = { ...list[idx], status: 'In_Progress' };
         }
       }
-      
-      // 统计数量（与 renderFeatureBoard 相同的逻辑）
-      list.forEach(f => {
-        const status = f.status || 'Pending';
-        if (stats[status] !== undefined) {
-          stats[status]++;
-        }
-      });
-      
-      // 更新显示
-      document.getElementById('queue-pending').textContent = stats.Pending;
-      document.getElementById('queue-active').textContent = stats.In_Progress;
-      document.getElementById('queue-completed').textContent = stats.Completed;
+
+      let nPending = 0;
+      let nQueued = 0;
+      let nCompleted = 0;
+      for (const f of list) {
+        const st = f.status || 'Pending';
+        if (st === 'Completed') nCompleted++;
+        else if (st === 'Queued') nQueued++;
+        else if (st === 'In_Progress') {
+          if (execId && f.id === execId) continue;
+          nQueued++;
+        } else if (st === 'Pending' || !f.status) nPending++;
+      }
+      const devQueueTotal = nQueued + (execId ? 1 : 0);
+
+      document.getElementById('queue-pending').textContent = nPending;
+      document.getElementById('queue-active').textContent = devQueueTotal;
+      document.getElementById('queue-completed').textContent = nCompleted;
       
       // 如果有开发中的任务，显示提示
       const activeLabel = document.getElementById('queue-active');
@@ -1349,7 +1563,7 @@
         if (data.success) {
           showToast('任务已停止', 'success');
           // 刷新数据
-          setTimeout(() => loadProjectData(currentProject), 500);
+          setTimeout(() => refreshAllData(), 500);
         } else {
           showToast(data.error || '停止失败', 'error');
         }
@@ -1365,43 +1579,9 @@
       document.getElementById('project-desc').textContent = data.project.description || '暂无描述';
       document.getElementById('project-tech').textContent = (data.project.tech_stack || []).join(' · ') || '';
 
-      // Agent 状态：以内存队列为准（与终端日志同源），dev_state 作兜底
-      const live = data.queue && data.queue.in_progress;
-      const ctx = { ...(data.current_context || {}) };
-      if (live) {
-        ctx.agent_task_id = live.id;
-        ctx.task_name = live.feature_name;
-        ctx.trial_count = live.error_count ?? 0;
-        ctx.last_error = live.last_error ?? null;
-      }
-      const hasTask = !!ctx.agent_task_id;
-      
-      document.getElementById('current-task').textContent = hasTask ? (ctx.task_name || '执行中...') : '等待指令...';
-      document.getElementById('task-id').textContent = ctx.agent_task_id || '--';
-      document.getElementById('trial-count').textContent = `${ctx.trial_count || 0} 次`;
-      
-      const badge = document.getElementById('agent-badge');
-      const card = document.getElementById('agent-card');
-      
-      if (hasTask) {
-        badge.textContent = '运行中';
-        badge.className = 'px-2 py-1 text-xs rounded bg-accent/20 text-accent border border-accent/30 animate-pulse';
-        card.classList.add('animate-pulse-border');
-      } else {
-        badge.textContent = '空闲';
-        badge.className = 'px-2 py-1 text-xs rounded bg-gray-500/20 text-gray-400 border border-gray-500/30';
-        card.classList.remove('animate-pulse-border');
-      }
+      // 获取执行中的任务
+      const live = data.queue && data.queue.executing;
 
-      const errorBox = document.getElementById('error-box');
-      if (ctx.last_error) {
-        errorBox.classList.remove('hidden');
-        document.getElementById('last-error').textContent = ctx.last_error;
-      } else {
-        errorBox.classList.add('hidden');
-      }
-
-      // 部署服务状态
       renderDeployServices(data.deploy_services || []);
 
       // 看板（队列里正在跑但不在 feature_list 的任务也显示在「开发中」）
@@ -1466,139 +1646,248 @@
     let draggedCard = null;
     let draggedFeature = null;
 
-    // 渲染看板
-    function renderFeatureBoard(features, queueLive) {
+    // 渲染看板：开发队列 = 当前执行（置顶标红、不可操作）+ 按 feature_list 顺序的排队项
+    function renderFeatureBoard(features, executingTask) {
       const cols = { pending: document.getElementById('col-pending'), progress: document.getElementById('col-progress'), completed: document.getElementById('col-completed') };
       const counts = { pending: document.getElementById('count-pending'), progress: document.getElementById('count-progress'), completed: document.getElementById('count-completed') };
 
       const list = [...(features || [])];
-      if (queueLive && queueLive.feature_id) {
-        const idx = list.findIndex(f => f.id === queueLive.feature_id);
+      const execId = executingTask && executingTask.feature_id;
+      if (execId) {
+        const idx = list.findIndex(f => f.id === execId);
         if (idx === -1) {
           list.push({
-            id: queueLive.feature_id,
-            name: queueLive.feature_name,
-            description: queueLive.feature_desc || '',
+            id: executingTask.feature_id,
+            name: executingTask.feature_name,
+            description: executingTask.feature_desc || '',
             status: 'In_Progress',
-            category: queueLive.category || '执行中'
+            category: executingTask.category || '执行中'
           });
         } else {
           list[idx] = { ...list[idx], status: 'In_Progress' };
         }
       }
 
-      // 清空列
-      Object.values(cols).forEach(c => { if(c) c.innerHTML = ''; });
-      const stats = { Pending: 0, In_Progress: 0, Completed: 0 };
+      Object.values(cols).forEach(c => { if (c) c.innerHTML = ''; });
 
-      list.forEach((f, index) => {
-        const status = f.status || 'Pending';
-        stats[status]++;
-        
+      const pendingItems = list.filter(f => (f.status || 'Pending') === 'Pending');
+      const queuedInOrder = list.filter(f => f.status === 'Queued' && f.id !== execId);
+      const completedItems = list.filter(f => f.status === 'Completed');
+      let runner = null;
+      if (execId) {
+        runner = list.find(f => f.id === execId) || null;
+      }
+
+      function mountCard(targetCol, f, opts) {
+        const isRunner = !!opts.isRunner;
+        const isQueued = !isRunner && f.status === 'Queued';
+        const status = isRunner ? 'In_Progress' : (f.status || 'Pending');
         const sInfo = statusMap[status] || statusMap.Pending;
-        
-        // 确定目标列
-        const colKey = sInfo.col.replace('col-', '');
-        const target = cols[colKey];
-        
+
         const card = document.createElement('div');
-        card.className = 'bg-dark-700 rounded-lg p-3 border border-dark-600 hover:border-dark-500 transition-all cursor-move group relative';
-        card.draggable = true;
         card.dataset.featureId = f.id;
-        card.dataset.index = index;
-        
-        // 待处理卡片显示"点击开始开发"提示
-        const actionHint = status === 'Pending' ? '<span class="text-[10px] text-accent mt-1 block">点击开始开发 →</span>' : '';
-        
-        // 删除按钮（hover 显示）
-        const deleteBtn = status !== 'In_Progress' ? `
-          <button onclick="deleteFeature('${f.id}', event)" 
-            class="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded bg-red-500/20 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/40 transition-all text-xs"
-            title="删除任务">
-            ×
-          </button>
-        ` : '';
-        
+        const borderRun = isRunner ? 'border-red-500/70 bg-red-950/25 shadow-[0_0_0_1px_rgba(239,68,68,0.35)]' : 'border-dark-600 hover:border-dark-500';
+        card.className = `rounded-lg p-2.5 border transition-all relative ${borderRun} ${isRunner ? 'cursor-not-allowed' : 'bg-dark-700' + (isQueued ? '' : ' cursor-move')}`;
+
+        card.draggable = !isRunner && !isQueued;
+
+        const dotClass = isRunner ? 'bg-violet-500 animate-pulse' : (status === 'Pending' ? 'bg-amber-400' : status === 'Queued' ? 'bg-blue-400' : 'bg-emerald-400');
+        const dotTitle = isRunner ? '执行中（已锁定）' : sInfo.label;
+
+        // 圆形按钮 - 更小的尺寸
+        let sideBtn = '';
+        if (isRunner) {
+          // 执行中：仅显示暂停按钮（紫色），卡片完全锁定
+          sideBtn = `
+            <button type="button" onclick="pauseTopTask(event)"
+              class="w-7 h-7 rounded-full bg-violet-500/20 text-violet-300 hover:bg-violet-500/35 border border-violet-500/35 flex items-center justify-center transition-colors"
+              title="暂停任务">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </button>`;
+        } else if (isQueued) {
+          // 排队中：上下调序按钮
+          sideBtn = `
+            <button type="button" onclick="moveFeature('${f.id}', 'up', event)"
+              class="w-6 h-6 rounded bg-dark-600 text-gray-400 hover:text-white hover:bg-dark-500 flex items-center justify-center transition-colors"
+              title="上移（提前执行）">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+            </button>
+            <button type="button" onclick="moveFeature('${f.id}', 'down', event)"
+              class="w-6 h-6 rounded bg-dark-600 text-gray-400 hover:text-white hover:bg-dark-500 flex items-center justify-center transition-colors"
+              title="下移（延后执行）">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>`;
+        } else if (status === 'Pending' && !isRunner) {
+          sideBtn = `
+            <button type="button" onclick="quickStartTask('${f.id}', event)"
+              class="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/35 border border-emerald-500/35 flex items-center justify-center transition-colors"
+              title="执行开发">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </button>`;
+        } else if (status === 'Completed' && !isRunner) {
+          sideBtn = `
+            <button type="button" onclick="deleteFeature('${f.id}', event)"
+              class="w-7 h-7 rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/30 border border-red-500/25 flex items-center justify-center transition-colors"
+              title="删除">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </button>`;
+        }
+
+        const runnerBadge = isRunner
+          ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/30 text-violet-200 border border-violet-500/40">执行中</span>'
+          : (isQueued ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">排队</span>' : '');
+
+        // 简化的卡片布局 - 状态点在最右边
         card.innerHTML = `
-          ${deleteBtn}
-          <div class="flex items-start justify-between mb-1">
-            <span class="text-xs text-accent font-mono">${f.id}</span>
+          <div class="flex items-center gap-2">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] text-accent font-mono">${f.id}</span>
+                ${runnerBadge}
+              </div>
+              <div class="text-sm text-white font-medium truncate mt-0.5" title="${escapeHtml(f.name || '')}">${escapeHtml(f.name || '')}</div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              ${sideBtn}
+              <span class="w-2 h-2 rounded-full ${dotClass}" title="${dotTitle}"></span>
+            </div>
           </div>
-          <div class="text-sm text-white font-medium mb-1 pr-4">${f.name}</div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-500">${f.category || '未分类'}</span>
-            <span class="px-2 py-0.5 text-[10px] rounded border ${sInfo.class}">${sInfo.label}</span>
-          </div>
-          ${actionHint}
         `;
-        
-        // 点击卡片开始开发（仅在待处理状态）
-        if (status === 'Pending') {
-          card.addEventListener('click', (e) => {
-            if (!e.target.closest('button') && !e.target.closest('.cursor-pointer')) {
-              showStartModal(f);
-            }
+
+        const payload = { ...f, __isRunner: isRunner };
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('button')) return;
+          if (isRunner || isQueued) return; // 执行中/排队中卡片不开弹窗
+          showFeatureModal(payload);
+        });
+
+        if (!isRunner) {
+          card.addEventListener('dragstart', (e) => {
+            draggedCard = card;
+            draggedFeature = f;
+            card.style.opacity = '0.5';
+            e.dataTransfer.effectAllowed = 'move';
+          });
+          card.addEventListener('dragend', () => {
+            card.style.opacity = '1';
+            draggedCard = null;
+            draggedFeature = null;
+            document.querySelectorAll('[id^="col-"]').forEach(col => {
+              col.classList.remove('border-accent', 'bg-accent/5');
+            });
           });
         }
-        
-        // 拖拽事件
-        card.addEventListener('dragstart', (e) => {
-          draggedCard = card;
-          draggedFeature = f;
-          card.style.opacity = '0.5';
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        
-        card.addEventListener('dragend', () => {
-          card.style.opacity = '1';
-          draggedCard = null;
-          draggedFeature = null;
-          // 移除所有拖拽样式
-          document.querySelectorAll('[id^="col-"]').forEach(col => {
+
+        targetCol.appendChild(card);
+      }
+
+      pendingItems.forEach(f => mountCard(cols.pending, f, { isRunner: false }));
+      if (runner) {
+        mountCard(cols.progress, runner, { isRunner: true });
+      }
+      queuedInOrder.forEach(f => mountCard(cols.progress, f, { isRunner: false }));
+      completedItems.forEach(f => mountCard(cols.completed, f, { isRunner: false }));
+
+      const boardEl = document.getElementById('feature-board');
+      if (boardEl && !boardEl.dataset.dropBound) {
+        boardEl.dataset.dropBound = '1';
+        Object.entries(cols).forEach(([status, col]) => {
+          if (!col) return;
+          col.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            col.classList.add('border-accent', 'bg-accent/5');
+          });
+          col.addEventListener('dragleave', () => {
             col.classList.remove('border-accent', 'bg-accent/5');
           });
-        });
-        
-        if (target) {
-          target.appendChild(card);
-        } else {
-          console.error(`[renderFeatureBoard] 找不到目标列: ${colKey}`);
-        }
-      });
-
-      // 设置列的拖拽接收
-      Object.entries(cols).forEach(([status, col]) => {
-        if (!col) return;
-        
-        col.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          col.classList.add('border-accent', 'bg-accent/5');
-        });
-        
-        col.addEventListener('dragleave', () => {
-          col.classList.remove('border-accent', 'bg-accent/5');
-        });
-        
-        col.addEventListener('drop', (e) => {
-          e.preventDefault();
-          col.classList.remove('border-accent', 'bg-accent/5');
-          
-          if (draggedFeature) {
-            const newStatus = status === 'pending' ? 'Pending' : status === 'progress' ? 'In_Progress' : 'Completed';
-            if (newStatus !== draggedFeature.status) {
-              updateFeatureStatus(draggedFeature.id, newStatus);
+          col.addEventListener('drop', (e) => {
+            e.preventDefault();
+            col.classList.remove('border-accent', 'bg-accent/5');
+            if (draggedFeature) {
+              const newStatus = status === 'pending' ? 'Pending' : status === 'progress' ? 'Queued' : 'Completed';
+              const cur = draggedFeature.status || 'Pending';
+              if (newStatus !== cur) {
+                updateFeatureStatus(draggedFeature.id, newStatus);
+              }
             }
-          }
+          });
         });
-      });
+      }
 
-      counts.pending.textContent = stats.Pending;
-      counts.progress.textContent = stats.In_Progress;
-      counts.completed.textContent = stats.Completed;
+      counts.pending.textContent = pendingItems.length;
+      counts.progress.textContent = queuedInOrder.length + (runner ? 1 : 0);
+      counts.completed.textContent = completedItems.length;
     }
 
-    // 删除任务
+    // 快速开始任务（无需弹窗确认）
+    async function quickStartTask(featureId, event) {
+      event.stopPropagation();
+      if (!currentProject) return;
+      
+      try {
+        showToast('正在启动任务...', 'info');
+        
+        // 直接调用 start API
+        const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/start`, {
+          method: 'POST'
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || (data.queued ? '已加入开发队列' : '任务已开始'), 'success');
+          refreshAllData();
+        } else {
+          showToast(data.error || '启动失败', 'error');
+        }
+      } catch (err) {
+        showToast('启动失败: ' + err.message, 'error');
+      }
+    }
+
+    // 调整开发队列中的任务顺序
+    async function moveFeature(featureId, direction, event) {
+      event.stopPropagation();
+      if (!currentProject) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/reorder`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ direction })
+        });
+        const data = await res.json();
+        if (data.success && !data.no_change) {
+          refreshAllData();
+        } else if (!data.success) {
+          showToast(data.error || '调整失败', 'error');
+        }
+      } catch (err) {
+        showToast('调整失败: ' + err.message, 'error');
+      }
+    }
+
+    // 暂停当前执行中的置顶任务
+    async function pauseTopTask(event) {
+      event.stopPropagation();
+      if (!currentProject) return;
+
+      if (!confirm('确定要暂停当前任务吗？\n\n任务将保留在开发队列中，待你点击「继续」后自动恢复执行。')) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/queue/${currentProject}/pause-task`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || '任务已暂停', 'success');
+          refreshAllData();
+        } else {
+          showToast(data.error || '暂停失败', 'error');
+        }
+      } catch (err) {
+        showToast('暂停失败: ' + err.message, 'error');
+      }
+    }
+
+        // 删除任务
     async function deleteFeature(featureId, event) {
       event.stopPropagation();
       if (!currentProject) return;
@@ -1630,12 +1919,15 @@
         const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/status`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: newStatus })
+          body: JSON.stringify({ status: newStatus, auto_start: true })
         });
         
         const data = await res.json();
         if (data.success) {
-          showToast(`状态已更新为: ${statusMap[newStatus]?.label || newStatus}`, 'success');
+          const message = data.task_started 
+            ? `状态已更新，任务已开始执行` 
+            : `状态已更新为: ${statusMap[newStatus]?.label || newStatus}`;
+          showToast(message, 'success');
           refreshAllData();
         } else {
           showToast(data.error || '更新失败', 'error');
@@ -1645,41 +1937,145 @@
       }
     }
 
-    // 显示开始开发弹窗
-    function showStartModal(feature) {
+    function showFeatureModal(feature, opts = {}) {
       selectedFeature = feature;
-      document.getElementById('modal-task-name').textContent = feature.name;
+      const readOnly = !!opts.readOnly || !!feature.__isRunner;
+      const st = feature.status || 'Pending';
+      const pending = st === 'Pending';
+      featureModalMode = pending ? 'start' : 'edit';
       document.getElementById('modal-task-id').textContent = feature.id;
+      document.getElementById('modal-task-title').value = feature.name || '';
+      document.getElementById('modal-task-desc').value = feature.description || '';
+      document.getElementById('modal-task-title').disabled = readOnly;
+      document.getElementById('modal-task-desc').disabled = readOnly;
+      const btnStart = document.getElementById('modal-btn-start');
+      const btnSave = document.getElementById('modal-btn-save-only');
+      const titleEl = document.getElementById('modal-title');
+      const subEl = document.getElementById('modal-subtitle');
+      if (readOnly) {
+        titleEl.textContent = '正在执行';
+        subEl.textContent = 'Agent 正在开发此任务，队列中其他项将按顺序等待。';
+        btnStart.classList.add('hidden');
+        btnSave.classList.add('hidden');
+      } else if (pending) {
+        titleEl.textContent = '开始开发';
+        subEl.textContent = '可修改标题与需求描述；若无其他执行中任务将立即开始，否则进入队列末尾。';
+        btnStart.classList.remove('hidden');
+        btnSave.classList.add('hidden');
+      } else {
+        titleEl.textContent = st === 'Queued' ? '排队任务' : '编辑需求';
+        subEl.textContent = st === 'Queued'
+          ? '修改后保存；轮到该任务时会自动按队列顺序启动。'
+          : '修改后点击「保存修改」写入 dev_state。';
+        btnStart.classList.add('hidden');
+        btnSave.classList.remove('hidden');
+      }
       document.getElementById('start-modal').classList.remove('hidden');
     }
 
     function closeModal() {
       document.getElementById('start-modal').classList.add('hidden');
+      document.getElementById('modal-task-title').disabled = false;
+      document.getElementById('modal-task-desc').disabled = false;
       selectedFeature = null;
     }
 
-    // 确认开始任务
+    async function saveFeatureFromModal() {
+      if (!selectedFeature || !currentProject) return;
+      const featureId = selectedFeature.id;
+      const name = document.getElementById('modal-task-title').value.trim();
+      const description = document.getElementById('modal-task-desc').value;
+      try {
+        const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/content`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('已保存', 'success');
+          closeModal();
+          refreshAllData();
+        } else {
+          showToast(data.error || '保存失败', 'error');
+        }
+      } catch (err) {
+        showToast('保存失败: ' + err.message, 'error');
+      }
+    }
+
     async function confirmStartTask() {
       if (!selectedFeature || !currentProject) return;
-      
-      // 先保存 ID，再关闭弹窗（closeModal 会把 selectedFeature 设为 null）
       const featureId = selectedFeature.id;
+      const name = document.getElementById('modal-task-title').value.trim();
+      const description = document.getElementById('modal-task-desc').value;
+      try {
+        const putRes = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/content`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description })
+        });
+        const putData = await putRes.json();
+        if (!putData.success) {
+          showToast(putData.error || '保存需求失败', 'error');
+          return;
+        }
+      } catch (err) {
+        showToast('保存需求失败: ' + err.message, 'error');
+        return;
+      }
       closeModal();
-      
       try {
         const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/start`, {
           method: 'POST'
         });
-        
         const data = await res.json();
         if (data.success) {
-          showToast('任务已加入开发队列！Agent将自动认领并执行', 'success');
+          showToast('任务已加入开发队列', 'success');
           refreshAllData();
         } else {
           showToast(data.error || '启动失败', 'error');
         }
       } catch (err) {
         showToast('启动失败: ' + err.message, 'error');
+      }
+    }
+
+    async function bulkBoardAction(action) {
+      if (!currentProject) {
+        showToast('请先选择项目', 'warning');
+        return;
+      }
+      const hints = {
+        pending_to_progress: '将所有「待处理」按列表顺序加入开发队列，并自动启动队首任务（若当前无执行中且未暂停）。',
+        progress_to_pending: '清空开发队列（排队+执行中）并全部退回「待处理」，并停止当前运行任务（若存在）。',
+        pause_in_progress: '将全局队列设为暂停，并停止当前项目正在运行的 Agent（若存在）。'
+      };
+      if (!confirm((hints[action] || '继续') + '\n\n确定执行？')) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/bulk-actions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || '操作成功', 'success');
+          if (action === 'pause_in_progress') {
+            try {
+              const q = await fetch(`${API_BASE}/api/queue`);
+              const qd = await q.json();
+              updatePauseUI(!!qd.paused);
+            } catch (_) {
+              updatePauseUI(true);
+            }
+          }
+          refreshAllData();
+        } else {
+          showToast(data.error || '操作失败', 'error');
+        }
+      } catch (err) {
+        showToast('操作失败: ' + err.message, 'error');
       }
     }
 
@@ -1708,67 +2104,6 @@
         `;
         container.appendChild(div);
       });
-    }
-
-    // NLP解析预览
-    async function parseNLP() {
-      const input = document.getElementById('nlp-input').value;
-      if (!input.trim()) {
-        showToast('请输入需求描述', 'error');
-        return;
-      }
-
-      try {
-        const res = await fetch(`${API_BASE}/api/nlp/parse`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ input, project_id: currentProject })
-        });
-        
-        const data = await res.json();
-        if (data.success) {
-          document.getElementById('nlp-preview').classList.remove('hidden');
-          document.getElementById('preview-title').textContent = data.parsed.title;
-          document.getElementById('preview-category').textContent = data.parsed.category;
-        }
-      } catch (err) {
-        showToast('解析失败', 'error');
-      }
-    }
-
-    // 提交NLP需求
-    async function submitNLP(e) {
-      e.preventDefault();
-      if (!currentProject) {
-        showToast('请先选择项目', 'error');
-        return;
-      }
-
-      const input = document.getElementById('nlp-input').value;
-      const autoStart = document.getElementById('nlp-auto-start').checked;
-
-      if (!input.trim()) {
-        showToast('请输入需求描述', 'error');
-        return;
-      }
-
-      try {
-        const res = await fetch(`${API_BASE}/api/nlp/submit`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ input, project_id: currentProject, auto_execute: autoStart })
-        });
-
-        const data = await res.json();
-        if (data.success) {
-          document.getElementById('nlp-form').reset();
-          document.getElementById('nlp-preview').classList.add('hidden');
-          showToast(autoStart ? '需求已创建并自动开始开发！' : '需求已创建！', 'success');
-          refreshAllData();
-        }
-      } catch (err) {
-        showToast('提交失败: ' + err.message, 'error');
-      }
     }
 
     function updateTime() {

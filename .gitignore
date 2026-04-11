@@ -1,8 +1,11 @@
 node_modules/
-server.log
-server-v2.log
+.trash/
 *.log
-backups/
+data/executor.log
+data/prompt-*.txt
+data/*.corrupt*
+backups/*.corrupt*
+backups/*.bak-corrupt
 .DS_Store
 .env
 *.pid

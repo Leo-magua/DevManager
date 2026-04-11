@@ -489,29 +489,34 @@ server {
     
     switch (deployConfig.template) {
       case 'vite':
+        // 使用 npx vite preview 直接指定端口和 host
         return {
-          command: 'npm run preview',
-          env: { PORT: deployConfig.port, HOST: '0.0.0.0' },
+          command: `npx vite preview --port ${deployConfig.port} --host`,
+          env: { ...process.env, PORT: deployConfig.port, HOST: '0.0.0.0' },
           cwd: project.path
         };
       
-      case 'python':
+      case 'python': {
+        // Use venv python interpreter if available
+        const venvPythonPath = require('path').join(project.path, 'venv', 'bin', 'python');
+        const pythonBin = require('fs').existsSync(venvPythonPath) ? './venv/bin/python' : 'python3';
         return {
-          command: `python production_server.py`,
-          env: { PORT: deployConfig.port },
+          command: `${pythonBin} production_server.py`,
+          env: { ...process.env, PORT: String(deployConfig.port) },
           cwd: project.path
         };
+      }
       
       case 'nodejs':
         return {
-          command: 'npm start',
-          env: { PORT: deployConfig.port },
+          command: `PORT=${deployConfig.port} npm start`,
+          env: { ...process.env, PORT: deployConfig.port },
           cwd: project.path
         };
       
       case 'static':
         return {
-          command: `python -m http.server ${deployConfig.port}`,
+          command: `python -m http.server ${deployConfig.port} --bind 0.0.0.0`,
           cwd: path.join(project.path, 'dist')
         };
       
