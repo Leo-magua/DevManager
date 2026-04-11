@@ -1,0 +1,49 @@
+{
+  "app": {
+    "name": "AllProject DevManager",
+    "version": "1.0.0",
+    "port": 81,
+    "description": "统一管理 AllProject 下所有子项目的开发看板"
+  },
+  "projects_root": "/var/www/AllProject",
+  "monitored_projects": [
+    {
+      "id": "personalwork",
+      "name": "PersonalWork",
+      "path": "/var/www/AllProject/PersonalWork",
+      "description": "个人项目作品管理工具",
+      "tech_stack": ["React", "TypeScript", "Vite", "Tailwind"],
+      "key_files": {
+        "dev_state": "dev_state.json",
+        "user_backlog": "user_backlog.json",
+        "status": ".kimi/status.md",
+        "requirements": "功能需求表.md"
+      },
+      "active": true
+    },
+    {
+      "id": "chickennoteLM",
+      "name": "ChickenNoteLM",
+      "path": "/var/www/AllProject/chickennoteLM",
+      "description": "智能笔记管理 + AI 辅助整理，支持多用户隔离与增量同步",
+      "tech_stack": ["JavaScript", "Tailwind CSS", "Flask", "Python"],
+      "key_files": {
+        "dev_state": "dev_state.json",
+        "user_backlog": "user_backlog.json",
+        "status": ".kimi/status.md",
+        "requirements": "FEATURE_LIST.md"
+      },
+      "active": true
+    }
+  ],
+  "features": {
+    "auto_refresh": 10,
+    "file_watcher": true,
+    "multi_project": true
+  },
+  "scan_settings": {
+    "auto_scan": false,
+    "interval": 5,
+    "updated_at": "2026-04-10T19:00:00Z"
+  }
+}

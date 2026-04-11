@@ -1,0 +1,374 @@
+#!/bin/bash
+#
+# DevManager CLI - Kimi命令行集成工具
+#
+# 安装: chmod +x /usr/local/bin/devman-cli
+# 使用: devman-cli [command] [options]
+#
+
+set -e
+
+DEVMAN_URL="${DEVMAN_URL:-http://localhost:81}"
+COLOR_RESET="\033[0m"
+COLOR_GREEN="\033[32m"
+COLOR_YELLOW="\033[33m"
+COLOR_BLUE="\033[34m"
+COLOR_RED="\033[31m"
+COLOR_GRAY="\033[90m"
+
+# 帮助信息
+show_help() {
+    cat << EOF
+DevManager CLI - 开发指挥中心命令行工具
+
+用法:
+  devman-cli [命令] [选项]
+
+命令:
+  status              查看当前任务队列状态
+  next                查看下一个待处理任务
+  claim               认领当前最高优先级任务
+  working             查看正在执行的任务详情
+  done [message]      标记当前任务完成
+  error [msg]         报告错误（可选重试）
+  log [type] [msg]    上报执行日志 (type: info|success|warning|error|command)
+  nlp [text]          提交自然语言需求
+  logs                查看最近日志
+  help                显示此帮助
+
+环境变量:
+  DEVMAN_URL      DevManager服务地址 (默认: http://localhost:81)
+
+示例:
+  # 查看状态
+  devman-cli status
+
+  # 认领并开始执行任务
+  devman-cli claim
+
+  # 完成任务
+  devman-cli done "实现了用户登录API，包含JWT认证"
+
+  # 报告错误并重试
+  devman-cli error "数据库连接失败" --retry
+
+  # 提交自然语言需求
+  devman-cli nlp "添加一个暗黑模式切换功能"
+
+EOF
+}
+
+# 检查依赖
+check_deps() {
+    if ! command -v curl &> /dev/null; then
+        echo "错误: 需要安装 curl"
+        exit 1
+    fi
+}
+
+# API调用
+api_call() {
+    local method="$1"
+    local endpoint="$2"
+    local data="${3:-}"
+    
+    if [ -n "$data" ]; then
+        curl -s -X "$method" \
+            -H "Content-Type: application/json" \
+            -d "$data" \
+            "${DEVMAN_URL}${endpoint}"
+    else
+        curl -s -X "$method" \
+            "${DEVMAN_URL}${endpoint}"
+    fi
+}
+
+# 显示状态
+show_status() {
+    echo -e "${COLOR_BLUE}⏳ 正在获取队列状态...${COLOR_RESET}"
+    local response=$(api_call "GET" "/api/queue")
+    
+    local pending=$(echo "$response" | grep -o '"pending_count":[0-9]*' | cut -d: -f2)
+    local completed=$(echo "$response" | grep -o '"completed_count":[0-9]*' | cut -d: -f2)
+    
+    echo -e "\n${COLOR_GREEN}📊 队列状态${COLOR_RESET}"
+    echo "  待处理: $pending"
+    echo "  已完成: $completed"
+    
+    # 检查是否有进行中任务
+    if echo "$response" | grep -q '"in_progress":{'; then
+        local task_name=$(echo "$response" | grep -o '"feature_name":"[^"]*"' | head -1 | cut -d'"' -f4)
+        local task_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        echo -e "\n${COLOR_YELLOW}▶️  正在执行${COLOR_RESET}"
+        echo "  任务: $task_name"
+        echo "  ID: $task_id"
+    fi
+}
+
+# 查看下一个任务
+show_next() {
+    echo -e "${COLOR_BLUE}🔍 查看下一个任务...${COLOR_RESET}"
+    local response=$(api_call "GET" "/api/agent/next-task")
+    
+    if echo "$response" | grep -q '"has_task":true'; then
+        local name=$(echo "$response" | grep -o '"feature_name":"[^"]*"' | cut -d'"' -f4)
+        local desc=$(echo "$response" | grep -o '"feature_desc":"[^"]*"' | cut -d'"' -f4)
+        local priority=$(echo "$response" | grep -o '"priority":"[^"]*"' | cut -d'"' -f4)
+        
+        echo -e "\n${COLOR_GREEN}📋 当前任务${COLOR_RESET}"
+        echo "  名称: $name"
+        echo "  描述: $desc"
+        echo "  优先级: $priority"
+        echo -e "\n${COLOR_YELLOW}💡 提示: 使用 'devman-cli claim' 认领此任务${COLOR_RESET}"
+    else
+        local pending=$(echo "$response" | grep -o '"pending_count":[0-9]*' | cut -d: -f2)
+        if [ "$pending" -gt 0 ]; then
+            echo -e "\n${COLOR_YELLOW}⏸️  有 $pending 个任务等待中，但尚未认领${COLOR_RESET}"
+        else
+            echo -e "\n${COLOR_GREEN}✅ 当前没有待处理的任务${COLOR_RESET}"
+        fi
+    fi
+}
+
+# 日志上报函数
+report_log() {
+    local type="$1"
+    local message="$2"
+    api_call "POST" "/api/queue/log" "{\"type\":\"$type\",\"message\":\"$message\"}" > /dev/null 2>&1
+}
+
+# 认领任务
+claim_task() {
+    echo -e "${COLOR_BLUE}🎯 正在认领任务...${COLOR_RESET}"
+    
+    local agent_id="kimi-cli-$(date +%s)"
+    local response=$(api_call "POST" "/api/queue/claim" "{\"agent_id\":\"$agent_id\",\"agent_name\":\"Kimi CLI\"}")
+    
+    if echo "$response" | grep -q '"error"'; then
+        local error=$(echo "$response" | grep -o '"error":"[^"]*"' | cut -d'"' -f4)
+        echo -e "${COLOR_RED}❌ 认领失败: $error${COLOR_RESET}"
+        exit 1
+    fi
+    
+    local name=$(echo "$response" | grep -o '"feature_name":"[^"]*"' | cut -d'"' -f4)
+    local task_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    
+    echo -e "${COLOR_GREEN}✅ 任务已认领!${COLOR_RESET}"
+    echo "  任务: $name"
+    echo "  ID: $task_id"
+    echo -e "\n${COLOR_YELLOW}📝 开始开发吧！完成后运行: devman-cli done '完成说明'${COLOR_RESET}"
+    echo -e "${COLOR_GRAY}💡 提示: 使用 devman-cli log [type] [message] 上报执行日志${COLOR_RESET}"
+}
+
+# 查看正在执行的任务
+show_working() {
+    local response=$(api_call "GET" "/api/queue")
+    
+    if echo "$response" | grep -q '"in_progress":null'; then
+        echo -e "${COLOR_YELLOW}⏸️  当前没有正在执行的任务${COLOR_RESET}"
+        exit 0
+    fi
+    
+    # 解析任务详情
+    local name=$(echo "$response" | grep -o '"feature_name":"[^"]*"' | head -1 | cut -d'"' -f4)
+    local task_id=$(echo "$response" | grep -o '"in_progress":{[^}]*"id":"[^"]*"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    local started=$(echo "$response" | grep -o '"started_at":"[^"]*"' | head -1 | cut -d'"' -f4)
+    local errors=$(echo "$response" | grep -o '"error_count":[0-9]*' | cut -d: -f2)
+    
+    echo -e "${COLOR_BLUE}▶️  当前执行任务${COLOR_RESET}"
+    echo "  名称: $name"
+    echo "  ID: $task_id"
+    echo "  开始时间: $started"
+    echo "  错误次数: $errors"
+}
+
+# 完成任务
+task_done() {
+    local message="${1:-任务完成}"
+    echo -e "${COLOR_BLUE}✅ 正在标记任务完成...${COLOR_RESET}"
+    
+    local response=$(api_call "POST" "/api/queue/complete" "{\"result\":\"$message\",\"files_changed\":[]}")
+    
+    if echo "$response" | grep -q '"success":true'; then
+        local name=$(echo "$response" | grep -o '"feature_name":"[^"]*"' | head -1 | cut -d'"' -f4)
+        echo -e "${COLOR_GREEN}✅ 任务已完成!${COLOR_RESET}"
+        echo "  任务: $name"
+        echo "  说明: $message"
+        
+        # 检查是否还有更多任务
+        local queue=$(api_call "GET" "/api/queue")
+        local pending=$(echo "$queue" | grep -o '"pending_count":[0-9]*' | cut -d: -f2)
+        if [ "$pending" -gt 0 ]; then
+            echo -e "\n${COLOR_YELLOW}💡 还有 $pending 个任务等待，运行 'devman-cli next' 查看${COLOR_RESET}"
+        fi
+    else
+        echo -e "${COLOR_RED}❌ 标记失败，可能没有正在执行的任务${COLOR_RESET}"
+        exit 1
+    fi
+}
+
+# 报告错误
+task_error() {
+    local message="$1"
+    local retry=false
+    
+    if [ "$2" == "--retry" ]; then
+        retry=true
+    fi
+    
+    if [ -z "$message" ]; then
+        echo "错误: 请提供错误信息"
+        exit 1
+    fi
+    
+    echo -e "${COLOR_RED}⚠️  正在报告错误...${COLOR_RESET}"
+    
+    local retry_flag=$([ "$retry" = true ] && echo "true" || echo "false")
+    local response=$(api_call "POST" "/api/queue/error" "{\"error\":\"$message\",\"retry\":$retry_flag}")
+    
+    if echo "$response" | grep -q '"success":true'; then
+        local count=$(echo "$response" | grep -o '"retry_count":[0-9]*' | cut -d: -f2)
+        echo -e "${COLOR_YELLOW}⚠️  错误已记录 (重试次数: $count)${COLOR_RESET}"
+        echo "  错误: $message"
+        
+        if [ "$retry" = true ]; then
+            echo -e "\n${COLOR_BLUE}🔄 已设置重试，请修复后重新执行${COLOR_RESET}"
+        else
+            echo -e "\n${COLOR_RED}❌ 任务已标记为失败${COLOR_RESET}"
+        fi
+    else
+        echo -e "${COLOR_RED}❌ 报告失败${COLOR_RESET}"
+        exit 1
+    fi
+}
+
+# 提交自然语言需求
+submit_nlp() {
+    local text="$1"
+    local project_id="${2:-personalwork}"
+    
+    if [ -z "$text" ]; then
+        echo "错误: 请提供需求描述"
+        exit 1
+    fi
+    
+    echo -e "${COLOR_BLUE}🤖 正在解析自然语言需求...${COLOR_RESET}"
+    echo "  输入: $text"
+    
+    # 先解析
+    local parse_response=$(api_call "POST" "/api/nlp/parse" "{\"input\":\"$text\",\"project_id\":\"$project_id\"}")
+    
+    if echo "$parse_response" | grep -q '"success":true'; then
+        local title=$(echo "$parse_response" | grep -o '"title":"[^"]*"' | head -1 | cut -d'"' -f4)
+        local priority=$(echo "$parse_response" | grep -o '"priority":"[^"]*"' | head -1 | cut -d'"' -f4)
+        local category=$(echo "$parse_response" | grep -o '"category":"[^"]*"' | head -1 | cut -d'"' -f4)
+        
+        echo -e "\n${COLOR_GREEN}📋 解析结果${COLOR_RESET}"
+        echo "  标题: $title"
+        echo "  优先级: $priority"
+        echo "  类别: $category"
+        
+        # 确认创建
+        echo -e "\n${COLOR_YELLOW}确认创建此需求? (y/n)${COLOR_RESET}"
+        read -r confirm
+        
+        if [ "$confirm" == "y" ] || [ "$confirm" == "Y" ]; then
+            local submit_response=$(api_call "POST" "/api/nlp/submit" "{\"input\":\"$text\",\"project_id\":\"$project_id\"}")
+            
+            if echo "$submit_response" | grep -q '"success":true'; then
+                local feature_id=$(echo "$submit_response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+                echo -e "${COLOR_GREEN}✅ 需求已创建!${COLOR_RESET}"
+                echo "  功能ID: $feature_id"
+            fi
+        else
+            echo "已取消"
+        fi
+    else
+        echo -e "${COLOR_RED}❌ 解析失败${COLOR_RESET}"
+    fi
+}
+
+# 上报执行日志
+log_message() {
+    local type="${1:-info}"
+    shift
+    local message="$*"
+    
+    if [ -z "$message" ]; then
+        echo "错误: 请提供日志消息"
+        echo "用法: devman-cli log [type] [message]"
+        echo "type: info | success | warning | error | command"
+        exit 1
+    fi
+    
+    local response=$(api_call "POST" "/api/queue/log" "{\"type\":\"$type\",\"message\":\"$message\"}")
+    
+    if echo "$response" | grep -q '"success":true'; then
+        # 本地显示，不上报成功消息
+        local color=$COLOR_BLUE
+        case "$type" in
+            success) color=$COLOR_GREEN ;;
+            error) color=$COLOR_RED ;;
+            warning) color=$COLOR_YELLOW ;;
+            command) color=$COLOR_GRAY ;;
+        esac
+        echo -e "${color}[$(date '+%H:%M:%S')] [$type] $message${COLOR_RESET}"
+    else
+        echo -e "${COLOR_RED}❌ 日志上报失败${COLOR_RESET}"
+    fi
+}
+
+# 查看日志
+show_logs() {
+    echo -e "${COLOR_BLUE}📜 最近日志${COLOR_RESET}\n"
+    
+    local response=$(api_call "GET" "/api/queue")
+    # 简化显示，实际可以从dev_state获取详细日志
+    echo "$response" | grep -o '"logs":\[[^]]*\]' | head -1 || echo "暂无日志"
+}
+
+# 主函数
+main() {
+    check_deps
+    
+    case "${1:-}" in
+        status)
+            show_status
+            ;;
+        next)
+            show_next
+            ;;
+        claim)
+            claim_task
+            ;;
+        working)
+            show_working
+            ;;
+        done)
+            task_done "$2"
+            ;;
+        error)
+            task_error "$2" "$3"
+            ;;
+        nlp)
+            submit_nlp "$2" "$3"
+            ;;
+        log)
+            shift
+            log_message "$@"
+            ;;
+        logs)
+            show_logs
+            ;;
+        help|--help|-h|"")
+            show_help
+            ;;
+        *)
+            echo "未知命令: $1"
+            echo "运行 'devman-cli help' 查看帮助"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

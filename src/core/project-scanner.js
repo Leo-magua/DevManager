@@ -1,0 +1,273 @@
+/**
+ * 项目扫描器
+ */
+const fs = require('fs').promises;
+const path = require('path');
+const { getConfig, saveConfig } = require('../config');
+const { broadcast } = require('../websocket/broadcast');
+const { getNginxManager } = require('../services/nginx-manager');
+
+class ProjectScanner {
+  constructor() {
+    this.autoScanInterval = null;
+    this.requiredFiles = ['dev_state.json', 'user_backlog.json'];
+    this.optionalFiles = { '.kimi/status.md': '# 项目状态\n\n## 当前状态\n- 项目运行正常\n\n## 最近更新\n- 自动创建\n' };
+  }
+
+  async scan() {
+    const config = getConfig();
+    const results = {
+      scanned: 0,
+      added: [],
+      updated: [],
+      errors: [],
+      timestamp: new Date().toISOString()
+    };
+
+    try {
+      const entries = await fs.readdir(config.projects_root, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name === 'DevManager') continue;
+        
+        const projectPath = path.join(config.projects_root, entry.name);
+        results.scanned++;
+
+        try {
+          const projectResult = await this.ensureProjectFiles(projectPath, entry.name);
+          
+          if (projectResult.created.length > 0) {
+            results.updated.push({
+              name: entry.name,
+              path: projectPath,
+              created: projectResult.created
+            });
+          }
+
+          const existingProject = config.monitored_projects.find(p => 
+            p.id === entry.name.toLowerCase() || p.path === projectPath
+          );
+
+          if (!existingProject) {
+            const newProject = await this.addProjectToConfig(entry.name, projectPath);
+            results.added.push(newProject);
+          }
+        } catch (err) {
+          results.errors.push({ name: entry.name, error: err.message });
+        }
+      }
+
+      if (results.added.length > 0) {
+        await saveConfig();
+      }
+
+      console.log(`[ProjectScanner] 扫描完成: ${results.scanned} 个目录, ${results.added.length} 个新增, ${results.updated.length} 个更新`);
+      broadcast('scan_complete', results);
+      
+    } catch (err) {
+      console.error('[ProjectScanner] 扫描失败:', err.message);
+      results.errors.push({ name: 'root', error: err.message });
+    }
+
+    return results;
+  }
+
+  async ensureProjectFiles(projectPath, projectName) {
+    const result = { created: [], existing: [] };
+
+    // dev_state.json
+    const devStatePath = path.join(projectPath, 'dev_state.json');
+    try {
+      await fs.access(devStatePath);
+      result.existing.push('dev_state.json');
+    } catch {
+      const defaultDevState = {
+        project: {
+          name: projectName,
+          current_stage: 'initialized',
+          tech_stack: { detected: 'auto' }
+        },
+        feature_list: [],
+        current_context: {
+          agent_task_id: null,
+          task_name: '等待指令',
+          start_time: null,
+          last_error: null,
+          trial_count: 0
+        },
+        changelog: [{
+          timestamp: new Date().toISOString(),
+          type: 'system',
+          message: '项目被扫描并自动初始化',
+          details: '自动创建了 dev_state.json'
+        }],
+        updated_at: new Date().toISOString()
+      };
+      await fs.writeFile(devStatePath, JSON.stringify(defaultDevState, null, 2));
+      result.created.push('dev_state.json');
+    }
+
+    // user_backlog.json
+    const backlogPath = path.join(projectPath, 'user_backlog.json');
+    try {
+      await fs.access(backlogPath);
+      result.existing.push('user_backlog.json');
+    } catch {
+      const defaultBacklog = {
+        version: '1.0',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        items: []
+      };
+      await fs.writeFile(backlogPath, JSON.stringify(defaultBacklog, null, 2));
+      result.created.push('user_backlog.json');
+    }
+
+    // .kimi/status.md
+    const kimiDir = path.join(projectPath, '.kimi');
+    const statusPath = path.join(kimiDir, 'status.md');
+    try {
+      await fs.access(statusPath);
+      result.existing.push('.kimi/status.md');
+    } catch {
+      await fs.mkdir(kimiDir, { recursive: true });
+      const defaultStatus = `# ${projectName} 项目状态
+
+## 当前状态
+- 项目已初始化
+- 等待进一步开发指令
+
+## 最近更新
+- ${new Date().toLocaleString()} - 项目被扫描并自动初始化
+`;
+      await fs.writeFile(statusPath, defaultStatus);
+      result.created.push('.kimi/status.md');
+    }
+
+    return result;
+  }
+
+  async addProjectToConfig(projectName, projectPath) {
+    const config = getConfig();
+    const projectId = projectName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    const techStack = await this.detectTechStack(projectPath);
+    
+    const newProject = {
+      id: projectId,
+      name: projectName,
+      path: projectPath,
+      description: `自动发现的项目: ${projectName}`,
+      tech_stack: techStack,
+      key_files: {
+        dev_state: 'dev_state.json',
+        user_backlog: 'user_backlog.json',
+        status: '.kimi/status.md'
+      },
+      active: true,
+      auto_detected: true,
+      detected_at: new Date().toISOString()
+    };
+
+    config.monitored_projects.push(newProject);
+    console.log(`[ProjectScanner] 添加新项目: ${projectName} (${projectId})`);
+    
+    // 自动生成 Nginx 部署配置
+    try {
+      const nginxManager = getNginxManager();
+      const deployConfig = await nginxManager.addProjectDeployConfig(newProject);
+      newProject.deploy_config = deployConfig;
+      
+      // 重新生成并保存 Nginx 配置
+      await nginxManager.saveNginxConfig();
+      
+      console.log(`[ProjectScanner] 已为 ${projectId} 生成 Nginx 配置: ${deployConfig.type} -> :${deployConfig.port}`);
+    } catch (err) {
+      console.error(`[ProjectScanner] 生成 Nginx 配置失败: ${err.message}`);
+    }
+    
+    return newProject;
+  }
+
+  async detectTechStack(projectPath) {
+    const techStack = [];
+    
+    try {
+      const pkgPath = path.join(projectPath, 'package.json');
+      try {
+        const pkgData = await fs.readFile(pkgPath, 'utf-8');
+        const pkg = JSON.parse(pkgData);
+        
+        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+        
+        if (deps.react) techStack.push('React');
+        if (deps.vue) techStack.push('Vue');
+        if (deps.typescript) techStack.push('TypeScript');
+        if (deps.vite) techStack.push('Vite');
+        if (deps.tailwindcss || deps['tailwindcss']) techStack.push('Tailwind CSS');
+        if (deps.express) techStack.push('Express');
+        if (deps.next) techStack.push('Next.js');
+        if (deps.flask) techStack.push('Flask');
+        
+        if (techStack.length === 0) {
+          techStack.push('Node.js');
+        }
+      } catch {}
+
+      const pyFiles = ['requirements.txt', 'setup.py', 'pyproject.toml'];
+      for (const pyFile of pyFiles) {
+        try {
+          await fs.access(path.join(projectPath, pyFile));
+          if (!techStack.includes('Python')) techStack.push('Python');
+          break;
+        } catch {}
+      }
+
+      if (!techStack.length) {
+        techStack.push('Unknown');
+      }
+    } catch {
+      techStack.push('Unknown');
+    }
+
+    return techStack;
+  }
+
+  startAutoScan(intervalMinutes = 5) {
+    if (this.autoScanInterval) {
+      clearInterval(this.autoScanInterval);
+    }
+    
+    console.log(`[ProjectScanner] 自动扫描已启动 (${intervalMinutes}分钟间隔)`);
+    
+    this.autoScanInterval = setInterval(async () => {
+      console.log('[ProjectScanner] 执行自动扫描...');
+      await this.scan();
+    }, intervalMinutes * 60 * 1000);
+  }
+
+  stopAutoScan() {
+    if (this.autoScanInterval) {
+      clearInterval(this.autoScanInterval);
+      this.autoScanInterval = null;
+      console.log('[ProjectScanner] 自动扫描已停止');
+    }
+  }
+
+  getStatus() {
+    const config = getConfig();
+    return {
+      auto_scan: this.autoScanInterval !== null,
+      monitored_count: config.monitored_projects.length,
+      projects_root: config.projects_root
+    };
+  }
+}
+
+const projectScanner = new ProjectScanner();
+
+module.exports = {
+  projectScanner,
+  getProjectScanner: () => projectScanner
+};

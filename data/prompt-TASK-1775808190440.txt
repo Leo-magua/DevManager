@@ -1,0 +1,25 @@
+你正在开发一个功能。请根据以下信息完成任务：
+
+【项目】PersonalWork
+【路径】/var/www/AllProject/PersonalWork
+【技术栈】React, TypeScript, Vite, Tailwind
+
+【任务】测试一下终端功能，在 console 输出 Hello World
+【描述】测试一下终端功能，在 console 输出 Hello World
+【优先级】Medium
+【类别】Feature
+
+请按以下步骤执行：
+1. 先读取项目结构和现有代码
+2. 分析需要实现的功能
+3. 编写/修改代码实现功能
+4. 测试确保功能正常
+5. 完成后报告结果
+
+注意：
+- 保持代码风格一致
+- 添加必要的注释
+- 确保不破坏现有功能
+- 如果有依赖需要先安装
+
+请开始开发。

@@ -1,0 +1,29 @@
+{
+  "name": "dev-manager",
+  "version": "1.0.0",
+  "description": "AllProject 开发管理中枢 - 统一管理多个项目的可视化看板",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "start:legacy": "node server.js",
+    "start:v2": "node server-v2.js",
+    "dev": "nodemon src/app.js"
+  },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "node-pty": "^1.1.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "project-management",
+    "dashboard",
+    "dev-tools"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,9 @@
+node_modules/
+server.log
+server-v2.log
+*.log
+backups/
+.DS_Store
+.env
+*.pid
+nohup.out
