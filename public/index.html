@@ -55,13 +55,14 @@
           </div>
         </div>
         <div class="flex items-center gap-4">
-          <button id="project-selector-btn" onclick="openProjectListModal()" class="flex items-center gap-2 px-4 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors min-w-[140px]">
+          <button id="project-selector-btn" onclick="openDeployModal()" class="flex items-center gap-2 px-4 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors min-w-[140px]">
             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
             <span id="current-project-name">选择项目...</span>
           </button>
           <button onclick="openScanModal()" class="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors" title="扫描项目目录">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
           </button>
+
           <button onclick="openSettingsModal()" class="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors" title="API设置">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <span class="hidden sm:inline">设置</span>
@@ -102,12 +103,7 @@
             </div>
             <p id="project-desc" class="text-sm text-gray-400">--</p>
           </div>
-          <div class="flex flex-wrap items-center gap-2 shrink-0">
-            <button type="button" onclick="openDeployModal()" class="flex items-center gap-1.5 px-3 py-2 bg-dark-700 border border-dark-500 hover:border-accent text-white text-xs rounded-lg transition-colors" title="Nginx 与部署服务">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-              部署管理
-            </button>
-          </div>
+
         </div>
       </div>
     </section>
@@ -152,7 +148,7 @@
       </div>
     </div>
 
-    <!-- 项目部署管理弹窗 -->
+    <!-- 项目管理弹窗 -->
     <div id="deploy-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div class="glass rounded-xl p-6 border border-dark-600 max-w-4xl w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col">
         <div class="flex items-center justify-between mb-4">
@@ -297,6 +293,9 @@
             </button>
             <button onclick="sendCtrlC()" class="px-2 py-1 text-xs text-amber-500 hover:text-amber-400 transition-colors" title="发送 Ctrl+C 中断信号">
               Ctrl+C
+            </button>
+            <button onclick="sendCtrlD()" class="px-2 py-1 text-xs text-amber-500 hover:text-amber-400 transition-colors" title="发送 Ctrl+D (EOF/退出)">
+              Ctrl+D
             </button>
             <button id="terminal-stop-btn" onclick="forceStopTerminalTask()" class="hidden px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30 rounded transition-colors flex items-center gap-1.5 font-medium" title="强制停止当前任务（Esc 键快捷）">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
@@ -615,13 +614,19 @@
           return;
         }
         
-        // 发送命令到终端
+        // 发送命令到终端（通过 xterm 的键盘输入处理，保持一致性）
         console.log(`[终端输入] 发送命令到 ${currentProject}: ${command}`);
-        devmanSocket.send(JSON.stringify({
-          type: 'terminal_input',
-          project_id: currentProject,
-          data: command + '\r'
-        }));
+        if (term) {
+          // 使用 term.paste 来模拟输入，这样可以统一走 term.onData 的处理
+          term.paste(command + '\r');
+        } else {
+          // 备用方案：直接发送
+          devmanSocket.send(JSON.stringify({
+            type: 'terminal_input',
+            project_id: currentProject,
+            data: command + '\r'
+          }));
+        }
         
         // 清空输入框
         input.value = '';
@@ -843,13 +848,21 @@
     }
 
     // ========== 部署管理弹窗 ==========
+    let deployModalRefreshInterval = null;
+
     function openDeployModal() {
       document.getElementById('deploy-modal').classList.remove('hidden');
       loadDeploymentStatus();
+      if (deployModalRefreshInterval) clearInterval(deployModalRefreshInterval);
+      deployModalRefreshInterval = setInterval(loadDeploymentStatus, 5000);
     }
 
     function closeDeployModal() {
       document.getElementById('deploy-modal').classList.add('hidden');
+      if (deployModalRefreshInterval) {
+        clearInterval(deployModalRefreshInterval);
+        deployModalRefreshInterval = null;
+      }
     }
 
     function toggleApiKeyVisibility() {
@@ -935,13 +948,15 @@
         
         devmanSocket.onopen = () => {
           console.log('[WebSocket] 连接成功');
-          // 如果有当前项目，订阅其终端
+          // 重连后使用当前 offset 订阅，避免重复接收已显示的内容
           if (currentProject) {
+            // 不重置终端，而是使用当前的 terminalOffset 继续接收新数据
             devmanSocket.send(JSON.stringify({
               type: 'subscribe_terminal',
               project_id: currentProject,
               offset: terminalOffset
             }));
+            console.log(`[WebSocket] 订阅终端: ${currentProject}, offset: ${terminalOffset}`);
           }
         };
         
@@ -954,24 +969,34 @@
             if (t === 'terminal_data' && msg.data) {
               if (term && msg.project_id === currentProject) {
                 term.write(msg.data);
+                // 更新 offset，用于断线重连后只获取新数据
+                if (msg.offset !== undefined) {
+                  terminalOffset = msg.offset;
+                }
               }
               return;
             }
             
-            // 终端退出
+            // 终端退出：更新状态指示器（退出消息已由后端写入缓冲区）
             if (t === 'terminal_exit') {
-              if (term && msg.project_id === currentProject) {
-                term.write(`\r\n\x1b[33m[任务结束 - 退出码: ${msg.code}, 耗时: ${msg.duration}秒]\x1b[0m\r\n`);
+              if (msg.project_id === currentProject) {
+                const statusEl = document.getElementById('terminal-status');
+                const stopBtn = document.getElementById('terminal-stop-btn');
+                if (msg.data && msg.data.success) {
+                  statusEl.textContent = '已完成';
+                  statusEl.className = 'ml-2 px-2 py-0.5 text-[10px] rounded bg-emerald-500/20 text-emerald-400';
+                } else {
+                  statusEl.textContent = msg.data && msg.data.code !== undefined ? `退出码:${msg.data.code}` : '已结束';
+                  statusEl.className = 'ml-2 px-2 py-0.5 text-[10px] rounded bg-red-500/20 text-red-400';
+                }
+                if (stopBtn) stopBtn.classList.add('hidden');
               }
               return;
             }
             
-            // 终端错误
+            // 终端错误（静默处理，shell 始终可用）
             if (t === 'terminal_error') {
               console.warn(`[终端错误] ${msg.project_id}: ${msg.error}`);
-              if (msg.project_id === currentProject) {
-                showToast(msg.error || '终端操作失败', 'warning');
-              }
               return;
             }
             
@@ -987,9 +1012,7 @@
               
               if (t === 'task_started' && msg.data?.project_id === currentProject) {
                 if (!term) initXterm();
-                else {
-                  try { term.reset(); term.clear(); } catch (_) {}
-                }
+                // 不清空终端：后端 init 已追加任务分隔符，重新订阅即可显示历史+新内容
                 terminalOffset = 0;
                 if (devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
                   devmanSocket.send(JSON.stringify({
@@ -998,6 +1021,16 @@
                     offset: 0
                   }));
                 }
+                // 更新状态指示器
+                const statusEl = document.getElementById('terminal-status');
+                if (statusEl) {
+                  const taskName = msg.data?.feature_name || msg.data?.task?.feature_name || '';
+                  const shortName = taskName.length > 15 ? taskName.slice(0, 15) + '...' : taskName;
+                  statusEl.textContent = shortName ? `执行: ${shortName}` : '执行中';
+                  statusEl.className = 'ml-2 px-2 py-0.5 text-[10px] rounded bg-accent/20 text-accent animate-pulse';
+                }
+                const stopBtn = document.getElementById('terminal-stop-btn');
+                if (stopBtn) stopBtn.classList.remove('hidden');
               }
             }
           } catch (_) {}
@@ -1044,21 +1077,6 @@
         const data = await res.json();
         const projectList = data.projects || [];
         
-        // 获取部署状态
-        const deployRes = await fetch(`${API_BASE}/api/nginx/deploy-configs`);
-        const deployData = await deployRes.json();
-        const deployConfigs = deployData.configs || [];
-        
-        const deployStatusPromises = deployConfigs.map(async (config) => {
-          try {
-            const statusRes = await fetch(`${API_BASE}/api/deploy/${config.project_id}/status`);
-            return await statusRes.json();
-          } catch {
-            return { project_id: config.project_id, running: false };
-          }
-        });
-        const deployStatuses = await Promise.all(deployStatusPromises);
-        
         if (projectList.length === 0) {
           container.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">暂无项目，请先扫描项目目录</div>';
           return;
@@ -1067,25 +1085,9 @@
         container.innerHTML = '';
         projectList.forEach(p => {
           const isCurrent = p.id === currentProject;
-          const deployConfig = deployConfigs.find(c => c.project_id === p.id);
-          const deployStatus = deployStatuses.find(s => s.project_id === p.id);
-          const isRunning = deployStatus?.running || false;
           
           const item = document.createElement('div');
           item.className = `p-3 rounded-lg border cursor-pointer transition-all ${isCurrent ? 'bg-accent/10 border-accent/50' : 'bg-dark-800 border-dark-600 hover:border-dark-500'}`;
-          
-          let deployBtn = '';
-          if (deployConfig) {
-            if (isRunning) {
-              deployBtn = `<button onclick="event.stopPropagation(); deployProjectAction('${p.id}', 'stop')" class="w-8 h-8 rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/30 border border-red-500/25 flex items-center justify-center transition-colors" title="停止">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" /></svg>
-              </button>`;
-            } else {
-              deployBtn = `<button onclick="event.stopPropagation(); deployProjectAction('${p.id}', 'start')" class="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/25 flex items-center justify-center transition-colors" title="启动">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              </button>`;
-            }
-          }
           
           const statusDot = isCurrent ? '<span class="w-2 h-2 rounded-full bg-accent"></span>' : '';
           
@@ -1098,9 +1100,6 @@
                   ${p.active === false ? '<span class="text-[10px] text-gray-500">(停用)</span>' : ''}
                 </div>
                 <div class="text-xs text-gray-500 mt-0.5">${(p.tech_stack || []).join(' · ') || '未识别'}</div>
-              </div>
-              <div class="flex items-center gap-1.5 shrink-0">
-                ${deployBtn}
               </div>
             </div>
           `;
@@ -1116,24 +1115,6 @@
         });
       } catch (err) {
         container.innerHTML = `<div class="text-sm text-red-400 text-center py-8">加载失败: ${err.message}</div>`;
-      }
-    }
-
-    // 项目部署操作
-    async function deployProjectAction(projectId, action) {
-      try {
-        showToast(`${action === 'start' ? '启动' : '停止'}项目 ${projectId}...`, 'info');
-        const res = await fetch(`${API_BASE}/api/deploy/${projectId}/${action}`, { method: 'POST' });
-        const data = await res.json();
-        
-        if (data.success) {
-          showToast(data.message, 'success');
-          renderProjectList(); // 刷新列表
-        } else {
-          showToast(data.error || '操作失败', 'error');
-        }
-      } catch (err) {
-        showToast('操作失败: ' + err.message, 'error');
       }
     }
 
@@ -1161,26 +1142,27 @@
         document.getElementById('current-project-name').textContent = project.name;
       }
       
-      // 清空终端并重置
-      if (term) {
-        term.clear();
-        term.reset();
-      } else {
+      // 初始化终端（如果尚未初始化）
+      if (!term) {
         initXterm();
+      } else {
+        // 清空终端，准备显示新项目的内容
+        term.reset();
+      }
+      term.write('\x1b[90m[正在加载终端历史...]\x1b[0m\r\n');
+      
+      // 订阅新项目的终端（从 offset=0 开始获取完整历史）
+      if (devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
+        devmanSocket.send(JSON.stringify({
+          type: 'subscribe_terminal',
+          project_id: projectId,
+          offset: 0
+        }));
+        console.log(`[switchProject] 订阅终端: ${projectId}, offset: 0`);
       }
       
       await refreshAllData();
       showDashboard();
-      
-      // 重新订阅新项目的终端
-      if (devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
-        devmanSocket.send(JSON.stringify({
-          type: 'subscribe_terminal',
-          project_id: currentProject,
-          offset: 0
-        }));
-        console.log(`[切换项目] 订阅终端: ${currentProject}`);
-      }
     }
 
     // xterm.js 终端
@@ -1244,29 +1226,41 @@
         }
       });
       
-      // 窗口大小变化时自适应
-      window.addEventListener('resize', () => {
-        if (fitAddon) fitAddon.fit();
-      });
+      // 窗口大小变化时自适应，并通知后端调整 PTY 尺寸
+      const notifyResize = () => {
+        if (!fitAddon) return;
+        fitAddon.fit();
+        if (term && currentProject && devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
+          devmanSocket.send(JSON.stringify({
+            type: 'terminal_resize',
+            project_id: currentProject,
+            cols: term.cols,
+            rows: term.rows
+          }));
+        }
+      };
+      window.addEventListener('resize', notifyResize);
     }
 
     function clearXterm() {
       if (term) {
         term.clear();
-        terminalOffset = 0;
+        // 注意：clear 只是清屏，不应该重置 offset
+        // 否则会导致后续订阅时重复接收已显示的内容
       }
     }
 
     function restartXterm() {
       terminalOffset = 0;
       initXterm();
-      // 重新订阅终端
+      // 重新订阅终端，从 offset=0 获取完整历史
       if (currentProject && devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
         devmanSocket.send(JSON.stringify({
           type: 'subscribe_terminal',
           project_id: currentProject,
           offset: 0
         }));
+        console.log(`[restartXterm] 重新订阅终端: ${currentProject}, offset: 0`);
       }
     }
 
@@ -1276,6 +1270,16 @@
           type: 'terminal_input',
           project_id: currentProject,
           data: '\u0003'  // Ctrl+C
+        }));
+      }
+    }
+
+    function sendCtrlD() {
+      if (currentProject && devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
+        devmanSocket.send(JSON.stringify({
+          type: 'terminal_input',
+          project_id: currentProject,
+          data: '\u0004'  // Ctrl+D (EOF)
         }));
       }
     }
@@ -1353,12 +1357,16 @@
           const statusText = taskName ? `执行: ${taskName}` : '执行中';
           statusEl.textContent = statusText;
           statusEl.className = 'ml-2 px-2 py-0.5 text-[10px] rounded bg-accent/20 text-accent animate-pulse';
-          // 显示强制停止按钮
           if (stopBtn) stopBtn.classList.remove('hidden');
+        } else if (terminalData.task_id) {
+          // 有历史任务但已结束：显示空闲，隐藏停止按钮
+          const session = terminalData;
+          statusEl.textContent = '空闲 (有历史记录)';
+          statusEl.className = 'ml-2 px-2 py-0.5 text-[10px] rounded bg-gray-700 text-gray-400';
+          if (stopBtn) stopBtn.classList.add('hidden');
         } else {
           statusEl.textContent = '等待中';
           statusEl.className = 'ml-2 px-2 py-0.5 text-[10px] rounded bg-gray-700 text-gray-400';
-          // 隐藏强制停止按钮
           if (stopBtn) stopBtn.classList.add('hidden');
         }
       } catch (err) {
@@ -1375,19 +1383,13 @@
       document.getElementById('bottom-sections').classList.remove('hidden');
       // deployment-manager 改为弹窗形式，不在主页面显示
       
-      // 初始化 xterm
+      // 初始化 xterm（若尚未初始化）
       if (!term) {
         initXterm();
       }
       
-      // 订阅当前项目的终端
-      if (devmanSocket && devmanSocket.readyState === WebSocket.OPEN && currentProject) {
-        devmanSocket.send(JSON.stringify({
-          type: 'subscribe_terminal',
-          project_id: currentProject,
-          offset: terminalOffset
-        }));
-      }
+      // 注意：终端订阅现在在 switchProject() 或 WebSocket onopen 中统一处理
+      // 避免重复订阅导致内容重复显示
       
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
       autoRefreshInterval = setInterval(() => {
@@ -1535,9 +1537,63 @@
         });
         const data = await res.json();
         updatePauseUI(data.paused);
-        showToast(data.paused ? '任务队列已暂停' : '任务队列已恢复', data.paused ? 'warning' : 'success');
+        
+        if (data.paused) {
+          showToast('任务队列已暂停', 'warning');
+        } else {
+          showToast('任务队列已恢复', 'success');
+          // 恢复后，如果有当前项目且有待执行任务，自动触发执行
+          if (currentProject) {
+            // 延迟1秒确保后端状态已完全切换
+            setTimeout(() => {
+              startNextQueuedTask();
+            }, 1000);
+          }
+        }
       } catch (err) {
         showToast('操作失败: ' + err.message, 'error');
+      }
+    }
+    
+    // 开始执行队列最上方的任务（直接认领并执行）
+    async function startNextQueuedTask() {
+      if (!currentProject) return;
+      
+      try {
+        // 先检查当前项目状态
+        const statusRes = await fetch(`${API_BASE}/api/queue/${currentProject}`);
+        const statusData = await statusRes.json();
+        
+        // 如果没有执行中的任务且有排队任务
+        if (!statusData.executing && statusData.queued_count > 0) {
+          console.log('[继续] 开始认领并执行队列最上方任务');
+          
+          // 直接调用认领任务API
+          const claimRes = await fetch(`${API_BASE}/api/queue/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              project_id: currentProject,
+              agent_id: 'manual-resume',
+              agent_name: 'User Resume'
+            })
+          });
+          
+          const claimData = await claimRes.json();
+          if (claimData.success && claimData.task) {
+            showToast(`开始执行: ${claimData.task.feature_name}`, 'success');
+            refreshAllData();
+          } else if (claimData.error) {
+            showToast(claimData.error, 'warning');
+          }
+        } else if (statusData.executing) {
+          console.log('[继续] 已有任务在执行中');
+        } else {
+          console.log('[继续] 队列为空');
+        }
+      } catch (err) {
+        console.error('[继续] 触发执行失败:', err);
+        showToast('继续执行失败: ' + err.message, 'error');
       }
     }
 
@@ -1645,6 +1701,7 @@
     // 当前拖拽的卡片
     let draggedCard = null;
     let draggedFeature = null;
+    let draggedCardIsQueued = false; // 标记拖拽的是否是排队中任务
 
     // 渲染看板：开发队列 = 当前执行（置顶标红、不可操作）+ 按 feature_list 顺序的排队项
     function renderFeatureBoard(features, executingTask) {
@@ -1687,9 +1744,11 @@
         const card = document.createElement('div');
         card.dataset.featureId = f.id;
         const borderRun = isRunner ? 'border-red-500/70 bg-red-950/25 shadow-[0_0_0_1px_rgba(239,68,68,0.35)]' : 'border-dark-600 hover:border-dark-500';
-        card.className = `rounded-lg p-2.5 border transition-all relative ${borderRun} ${isRunner ? 'cursor-not-allowed' : 'bg-dark-700' + (isQueued ? '' : ' cursor-move')}`;
+        // 排队中任务可拖动（用于排序），待处理也可拖动（用于跨列），执行中不可拖动
+        const isDraggable = !isRunner;
+        card.className = `rounded-lg p-2.5 border transition-all relative ${borderRun} ${isRunner ? 'cursor-not-allowed' : 'bg-dark-700' + (isDraggable ? ' cursor-move' : '')}`;
 
-        card.draggable = !isRunner && !isQueued;
+        card.draggable = isDraggable;
 
         const dotClass = isRunner ? 'bg-violet-500 animate-pulse' : (status === 'Pending' ? 'bg-amber-400' : status === 'Queued' ? 'bg-blue-400' : 'bg-emerald-400');
         const dotTitle = isRunner ? '执行中（已锁定）' : sInfo.label;
@@ -1705,18 +1764,8 @@
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </button>`;
         } else if (isQueued) {
-          // 排队中：上下调序按钮
-          sideBtn = `
-            <button type="button" onclick="moveFeature('${f.id}', 'up', event)"
-              class="w-6 h-6 rounded bg-dark-600 text-gray-400 hover:text-white hover:bg-dark-500 flex items-center justify-center transition-colors"
-              title="上移（提前执行）">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
-            </button>
-            <button type="button" onclick="moveFeature('${f.id}', 'down', event)"
-              class="w-6 h-6 rounded bg-dark-600 text-gray-400 hover:text-white hover:bg-dark-500 flex items-center justify-center transition-colors"
-              title="下移（延后执行）">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-            </button>`;
+          // 排队中：可通过拖动排序，不需要按钮
+          sideBtn = '';
         } else if (status === 'Pending' && !isRunner) {
           sideBtn = `
             <button type="button" onclick="quickStartTask('${f.id}', event)"
@@ -1735,7 +1784,7 @@
 
         const runnerBadge = isRunner
           ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/30 text-violet-200 border border-violet-500/40">执行中</span>'
-          : (isQueued ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">排队</span>' : '');
+          : (isQueued ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 font-medium">⏳ 排队</span>' : '');
 
         // 简化的卡片布局 - 状态点在最右边
         card.innerHTML = `
@@ -1757,7 +1806,7 @@
         const payload = { ...f, __isRunner: isRunner };
         card.addEventListener('click', (e) => {
           if (e.target.closest('button')) return;
-          if (isRunner || isQueued) return; // 执行中/排队中卡片不开弹窗
+          if (isRunner) return; // 执行中卡片不开弹窗
           showFeatureModal(payload);
         });
 
@@ -1765,6 +1814,7 @@
           card.addEventListener('dragstart', (e) => {
             draggedCard = card;
             draggedFeature = f;
+            draggedCardIsQueued = isQueued; // 标记是否是排队中任务
             card.style.opacity = '0.5';
             e.dataTransfer.effectAllowed = 'move';
           });
@@ -1772,6 +1822,7 @@
             card.style.opacity = '1';
             draggedCard = null;
             draggedFeature = null;
+            draggedCardIsQueued = false;
             document.querySelectorAll('[id^="col-"]').forEach(col => {
               col.classList.remove('border-accent', 'bg-accent/5');
             });
@@ -1804,12 +1855,28 @@
           col.addEventListener('drop', (e) => {
             e.preventDefault();
             col.classList.remove('border-accent', 'bg-accent/5');
-            if (draggedFeature) {
-              const newStatus = status === 'pending' ? 'Pending' : status === 'progress' ? 'Queued' : 'Completed';
-              const cur = draggedFeature.status || 'Pending';
-              if (newStatus !== cur) {
-                updateFeatureStatus(draggedFeature.id, newStatus);
+            if (!draggedFeature) return;
+            
+            const newStatus = status === 'pending' ? 'Pending' : status === 'progress' ? 'Queued' : 'Completed';
+            const cur = draggedFeature.status || 'Pending';
+            
+            // 如果是排队中任务在开发队列列内拖动，处理排序
+            if (draggedCardIsQueued && status === 'progress' && cur === 'Queued') {
+              handleQueuedReorder(e, col);
+              return;
+            }
+            
+            // 排队中任务拖到待处理列 -> 移出队列
+            if (draggedCardIsQueued && status === 'pending' && cur === 'Queued') {
+              if (confirm('确定要将此任务移出开发队列？')) {
+                updateFeatureStatus(draggedFeature.id, 'Pending');
               }
+              return;
+            }
+            
+            // 跨列状态变更（其他情况）
+            if (newStatus !== cur) {
+              updateFeatureStatus(draggedFeature.id, newStatus);
             }
           });
         });
@@ -1864,6 +1931,70 @@
       } catch (err) {
         showToast('调整失败: ' + err.message, 'error');
       }
+    }
+
+    // 处理开发队列内的拖动排序
+    async function handleQueuedReorder(e, col) {
+      if (!draggedFeature || !currentProject) return;
+      
+      // 获取鼠标位置下的所有卡片
+      const afterElement = getDragAfterElement(col, e.clientY);
+      
+      // 获取开发队列中所有排队中任务的顺序
+      const cards = [...col.querySelectorAll('[data-feature-id]')];
+      const queuedCards = cards.filter(card => {
+        const fid = card.dataset.featureId;
+        // 排除执行中的任务（置顶任务）
+        return fid !== draggedFeature.id && !card.querySelector('.bg-violet-500');
+      });
+      
+      // 找到目标位置
+      let targetIndex = queuedCards.length;
+      if (afterElement) {
+        targetIndex = queuedCards.indexOf(afterElement);
+        if (targetIndex === -1) targetIndex = queuedCards.length;
+      }
+      
+      // 找到当前 draggedFeature 在队列中的位置
+      const currentList = [...queuedCards];
+      const currentIndex = currentList.findIndex(card => card.dataset.featureId === draggedFeature.id);
+      
+      // 计算需要移动的方向和步数
+      if (currentIndex !== -1 && targetIndex !== currentIndex) {
+        const direction = targetIndex < currentIndex ? 'up' : 'down';
+        const steps = Math.abs(targetIndex - currentIndex);
+        
+        // 调用API逐步移动
+        try {
+          for (let i = 0; i < steps; i++) {
+            const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${draggedFeature.id}/reorder`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ direction })
+            });
+            const data = await res.json();
+            if (!data.success) break;
+          }
+          refreshAllData();
+        } catch (err) {
+          showToast('排序调整失败: ' + err.message, 'error');
+        }
+      }
+    }
+
+    // 获取拖动后的位置元素
+    function getDragAfterElement(container, y) {
+      const draggableElements = [...container.querySelectorAll('[draggable="true"]')];
+      
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
     // 暂停当前执行中的置顶任务
@@ -2070,6 +2201,8 @@
               updatePauseUI(true);
             }
           }
+          // 强制刷新：pending_to_progress 后所有 Queued 任务必须立刻显示在队列列中
+          isRefreshing = false;
           refreshAllData();
         } else {
           showToast(data.error || '操作失败', 'error');
@@ -2299,12 +2432,18 @@
     
     let deploymentData = [];
     
-    // 加载部署状态
+    // 加载部署状态（含所有项目，实时端口检测）
     async function loadDeploymentStatus() {
       try {
-        // 获取 Nginx 状态
-        const nginxRes = await fetch(`${API_BASE}/api/nginx/status`);
+        // 并行获取 Nginx 状态、所有项目、部署配置
+        const [nginxRes, projectsRes, deployRes] = await Promise.all([
+          fetch(`${API_BASE}/api/nginx/status`),
+          fetch(`${API_BASE}/api/projects`),
+          fetch(`${API_BASE}/api/nginx/deploy-configs`)
+        ]);
         const nginxData = await nginxRes.json();
+        const projectsData = await projectsRes.json();
+        const deployData = await deployRes.json();
         
         // 更新 Nginx 状态栏
         const badge = document.getElementById('nginx-config-badge');
@@ -2316,29 +2455,28 @@
           badge.className = 'px-2 py-0.5 text-xs rounded bg-red-500/20 text-red-400';
         }
         
-        // 获取所有部署配置
-        const deployRes = await fetch(`${API_BASE}/api/nginx/deploy-configs`);
-        const deployData = await deployRes.json();
-        
+        const allProjects = projectsData.projects || [];
         deploymentData = deployData.configs || [];
         
-        // 获取每个项目的运行状态
-        const listContainer = document.getElementById('deployment-list');
-        listContainer.innerHTML = '<div class="text-sm text-gray-500 italic">加载中...</div>';
+        // 构建部署配置映射
+        const deployConfigMap = {};
+        deploymentData.forEach(c => { deployConfigMap[c.project_id] = c; });
         
-        const projectStatuses = await Promise.all(
+        // 并行获取所有有部署配置项目的端口运行状态（实时检测）
+        const portStatusMap = {};
+        await Promise.all(
           deploymentData.map(async (config) => {
             try {
               const statusRes = await fetch(`${API_BASE}/api/deploy/${config.project_id}/status`);
-              return await statusRes.json();
+              portStatusMap[config.project_id] = await statusRes.json();
             } catch {
-              return { project_id: config.project_id, running: false };
+              portStatusMap[config.project_id] = { project_id: config.project_id, running: false };
             }
           })
         );
         
-        // 渲染项目列表
-        renderDeploymentList(deploymentData, projectStatuses);
+        // 渲染统一的项目+部署管理列表
+        renderDeploymentList(allProjects, deployConfigMap, portStatusMap);
         
       } catch (err) {
         console.error('加载部署状态失败:', err);
@@ -2347,57 +2485,89 @@
       }
     }
     
-    // 渲染部署列表
-    function renderDeploymentList(configs, statuses) {
+    // 渲染项目+部署统一列表（支持项目切换、实时状态、自动同步）
+    function renderDeploymentList(allProjects, deployConfigMap, portStatusMap) {
       const container = document.getElementById('deployment-list');
       
-      if (configs.length === 0) {
-        container.innerHTML = '<div class="text-sm text-gray-500 italic">暂无部署配置</div>';
+      if (allProjects.length === 0) {
+        container.innerHTML = '<div class="text-sm text-gray-500 italic text-center py-6">暂无项目，请先扫描项目目录</div>';
         return;
       }
       
-      container.innerHTML = configs.map(config => {
-        const status = statuses.find(s => s.project_id === config.project_id) || { running: false };
-        const statusColor = status.running ? 'bg-emerald-500' : 'bg-gray-500';
-        const statusText = status.running ? '运行中' : '已停止';
-        const statusBg = status.running ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-dark-800 border-dark-600';
+      container.innerHTML = '';
+      
+      allProjects.forEach(project => {
+        const isCurrent = project.id === currentProject;
+        const deployConfig = deployConfigMap[project.id];
+        const portStatus = deployConfig ? (portStatusMap[project.id] || { running: false }) : null;
+        const isRunning = !!(portStatus && portStatus.running);
         
-        return `
-          <div class="p-4 ${statusBg} rounded-lg border">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <span class="w-2.5 h-2.5 rounded-full ${statusColor}"></span>
-                <div>
-                  <div class="text-sm font-medium text-white">${config.project_name}</div>
-                  <div class="text-xs text-gray-500">${config.type} | 端口: ${config.port}</div>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 text-xs rounded ${status.running ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-700 text-gray-400'}">${statusText}</span>
-              </div>
-            </div>
-            <div class="mt-3 flex items-center gap-2">
-              <a href="http://${window.location.hostname}:8080/${config.nginx_path}/" target="_blank" 
-                 class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-500 transition-colors flex items-center gap-1">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                访问
-              </a>
-              ${status.running ? `
-                <button onclick="stopProject('${config.project_id}')" class="px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded border border-red-500/30 transition-colors">
-                  停止
-                </button>
-              ` : `
-                <button onclick="startProject('${config.project_id}')" class="px-3 py-1.5 text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded border border-emerald-500/30 transition-colors">
-                  启动
-                </button>
-              `}
-              <button onclick="editProjectPort('${config.project_id}', ${config.port})" class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-500 transition-colors">
-                修改端口
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('');
+        const card = document.createElement('div');
+        let cardClass = 'p-4 rounded-lg border transition-all cursor-pointer select-none ';
+        if (isCurrent) {
+          cardClass += 'bg-accent/10 border-accent/50 hover:border-accent';
+        } else if (isRunning) {
+          cardClass += 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/60';
+        } else {
+          cardClass += 'bg-dark-800 border-dark-600 hover:border-dark-500';
+        }
+        card.className = cardClass;
+        
+        let dotColor = 'bg-gray-500';
+        if (isCurrent) dotColor = 'bg-accent animate-pulse';
+        else if (isRunning) dotColor = 'bg-emerald-400 animate-pulse';
+        
+        const techInfo = (project.tech_stack || []).join(' · ') || '未识别';
+        const deployPortInfo = deployConfig ? ' | 端口 ' + deployConfig.port : '';
+        
+        let badges = '';
+        if (isCurrent) {
+          badges += '<span class="px-2 py-0.5 text-[10px] bg-accent/20 text-accent rounded border border-accent/30">当前项目</span>';
+        }
+        if (deployConfig) {
+          badges += isRunning
+            ? '<span class="px-2 py-0.5 text-[10px] bg-emerald-500/20 text-emerald-400 rounded border border-emerald-500/30">已部署</span>'
+            : '<span class="px-2 py-0.5 text-[10px] bg-gray-700 text-gray-400 rounded border border-gray-600">未运行</span>';
+        }
+        
+        let deployControlsHtml = '';
+        if (deployConfig) {
+          const hostname = window.location.hostname;
+          const nginxPath = deployConfig.nginx_path;
+          const accessUrl = 'http://' + hostname + ':8080/' + nginxPath + '/';
+          const startStopBtn = isRunning
+            ? '<button onclick="stopProject(\'' + project.id + '\')" class="px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded border border-red-500/30 transition-colors">停止</button>'
+            : '<button onclick="startProject(\'' + project.id + '\')" class="px-3 py-1.5 text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded border border-emerald-500/30 transition-colors">启动</button>';
+          deployControlsHtml = '<div class="mt-3 pt-3 border-t border-dark-600/50 flex items-center gap-2">' +
+            '<a href="' + accessUrl + '" target="_blank" class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-500 transition-colors flex items-center gap-1">' +
+            '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>访问</a>' +
+            startStopBtn +
+            '<button onclick="editProjectPort(\'' + project.id + '\', ' + deployConfig.port + ')" class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-gray-300 rounded border border-dark-500 transition-colors">修改端口</button>' +
+            '</div>';
+        }
+        
+        card.innerHTML =
+          '<div class="flex items-center justify-between">' +
+            '<div class="flex items-center gap-3 min-w-0">' +
+              '<span class="w-2.5 h-2.5 rounded-full ' + dotColor + ' shrink-0"></span>' +
+              '<div class="min-w-0">' +
+                '<div class="text-sm font-medium text-white truncate">' + escapeHtml(project.name) + '</div>' +
+                '<div class="text-xs text-gray-500 truncate">' + escapeHtml(techInfo + deployPortInfo) + '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="flex items-center gap-1.5 shrink-0 ml-2">' + badges + '</div>' +
+          '</div>' +
+          deployControlsHtml;
+        
+        // 点击卡片空白区域切换项目并关闭弹窗
+        card.addEventListener('click', function(e) {
+          if (e.target.closest('button') || e.target.closest('a')) return;
+          closeDeployModal();
+          switchProject(project.id);
+        });
+        
+        container.appendChild(card);
+      });
     }
     
     // 启动项目

@@ -127,9 +127,51 @@ function createRoutes() {
     const projects = await scanProjects();
     const monitored = config.monitored_projects || [];
     
-    const merged = [...monitored];
+    // 获取实际存在的项目ID集合（小写）
+    const existingProjectIds = new Set(projects.map(p => p.id.toLowerCase()));
+    
+    // 过滤掉已经不存在的项目目录（检查ID和路径）
+    const validMonitored = [];
+    const seenIds = new Set();
+    
+    for (const m of monitored) {
+      const mIdLower = m.id.toLowerCase();
+      
+      // 跳过重复ID的项目
+      if (seenIds.has(mIdLower)) {
+        console.log(`[项目列表] 跳过重复项目: ${m.id}`);
+        continue;
+      }
+      
+      // 检查项目目录是否仍然存在（通过ID或路径检查）
+      const idExists = existingProjectIds.has(mIdLower);
+      let pathExists = false;
+      if (!idExists && m.path) {
+        try {
+          await fs.access(m.path);
+          pathExists = true;
+        } catch {
+          pathExists = false;
+        }
+      }
+      
+      if (idExists || pathExists) {
+        seenIds.add(mIdLower);
+        validMonitored.push(m);
+      } else {
+        console.log(`[项目列表] 清理已删除的项目: ${m.id} (路径: ${m.path})`);
+      }
+    }
+    
+    // 如果有项目被清理，更新配置
+    if (validMonitored.length !== monitored.length) {
+      config.monitored_projects = validMonitored;
+      await saveConfig();
+    }
+    
+    const merged = [...validMonitored];
     for (const p of projects) {
-      if (!merged.find(m => m.id === p.id)) {
+      if (!merged.find(m => m.id.toLowerCase() === p.id.toLowerCase())) {
         merged.push({ ...p, active: false, auto_detected: true });
       }
     }
@@ -210,7 +252,7 @@ function createRoutes() {
       }
     }
 
-    const deployServices = deployServiceManager.getRunningServices(projectId);
+    const deployServices = await deployServiceManager.getRunningServices(projectId);
 
     res.json({
       project: { id: project.id, name: project.name, description: project.description, tech_stack: project.tech_stack },
@@ -271,7 +313,8 @@ function createRoutes() {
       } catch {}
       
       devState.feature_list = devState.feature_list || [];
-      const newId = `F${String(devState.feature_list.length + 1).padStart(3, '0')}`;
+      // 使用全局唯一ID生成
+      const newId = await taskQueue.generateGlobalFeatureId();
       
       const newFeature = {
         id: newId,
@@ -342,10 +385,19 @@ function createRoutes() {
   });
 
   router.post('/queue/claim', async (req, res) => {
-    const { project_id, agent_id, agent_name } = req.body;
+    const { project_id, agent_id, agent_name, auto_execute = true } = req.body;
     
     if (project_id) {
       const result = await taskQueue.claimTask(project_id, { agent_id, agent_name });
+      
+      // 认领成功后自动触发执行（如果 auto_execute 为 true）
+      if (result.success && auto_execute) {
+        console.log(`[API] 任务认领成功，自动触发执行: ${project_id} - ${result.task.feature_name}`);
+        agentExecutor.executeTask(project_id, result.task).catch((err) => {
+          console.error('[API] 认领后自动执行失败:', err);
+        });
+      }
+      
       res.json(result);
     } else {
       const result = await taskQueue.claimAnyTask({ agent_id, agent_name });
@@ -560,9 +612,9 @@ function createRoutes() {
     res.json(result);
   });
 
-  router.post('/deploy/:projectId/services/stop-all', (req, res) => {
+  router.post('/deploy/:projectId/services/stop-all', async (req, res) => {
     const { projectId } = req.params;
-    const result = deployServiceManager.stopAllServices(projectId);
+    const result = await deployServiceManager.stopAllServices(projectId);
     res.json(result);
   });
 
@@ -714,7 +766,8 @@ function createRoutes() {
       const devData = await fs.readFile(devStatePath, 'utf-8');
       const devState = JSON.parse(devData);
 
-      const newId = `F${String((devState.feature_list?.length || 0) + 1).padStart(3, '0')}`;
+      // 使用全局唯一ID生成
+      const newId = await taskQueue.generateGlobalFeatureId();
       
       const newFeature = {
         id: newId,
@@ -976,8 +1029,11 @@ function createRoutes() {
           }
         }
         await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
-        broadcast('features_bulk', { project_id: projectId, action, count: n });
         let started = false;
+        // 用户明确要求启动队列时，自动解除全局暂停（若存在）
+        if (taskQueue.isPaused()) {
+          taskQueue.setPaused(false);
+        }
         if (!taskQueue.isPaused() && !taskQueue.getExecutingTask(projectId)) {
           const next = await taskQueue.maybeStartNextFromQueue(projectId, {
             agent_id: 'bulk',
@@ -990,6 +1046,8 @@ function createRoutes() {
             started = true;
           }
         }
+        // 广播在 maybeStartNextFromQueue 之后，确保前端刷新时数据已完整（含 In_Progress+Queued 状态）
+        broadcast('features_bulk', { project_id: projectId, action, count: n, started });
         return res.json({
           success: true,
           action,
@@ -1018,8 +1076,12 @@ function createRoutes() {
           }
         }
         await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+        // 清空队列时同时解除全局暂停，避免影响其他项目启动
+        if (taskQueue.isPaused()) {
+          taskQueue.setPaused(false);
+        }
         broadcast('features_bulk', { project_id: projectId, action, count: n });
-        return res.json({ success: true, action, updated: n, message: `已将 ${n} 条退回待处理` });
+        return res.json({ success: true, action, updated: n, paused_reset: true, message: `已将 ${n} 条退回待处理` });
       }
 
       if (action === 'pause_in_progress') {
@@ -1062,13 +1124,12 @@ function createRoutes() {
       const devState = JSON.parse(data);
       
       devState.feature_list = devState.feature_list || [];
-      const startId = devState.feature_list.length + 1;
-      
       const createdFeatures = [];
       
       for (let i = 0; i < tasks.length; i++) {
         const task = tasks[i];
-        const newId = `F${String(startId + i).padStart(3, '0')}`;
+        // 使用全局唯一ID生成
+        const newId = await taskQueue.generateGlobalFeatureId();
         
         const newFeature = {
           id: newId,
@@ -1772,6 +1833,104 @@ function createRoutes() {
 
   // 挂载 Agent 直连路由
   router.use('/agent', require('./agent-direct'));
+
+  // ==================== 任务状态回调 API（供 AI Agent 调用） ====================
+  
+  // 任务完成回调
+  router.post('/tasks/:taskId/complete', async (req, res) => {
+    const { taskId } = req.params;
+    const { message = '任务完成' } = req.body;
+    
+    console.log(`[API] 任务完成回调: ${taskId}, message: ${message}`);
+    
+    // 查找任务所属项目
+    const config = getConfig();
+    let targetProject = null;
+    let targetTask = null;
+    
+    for (const project of config.monitored_projects) {
+      const executing = taskQueue.getExecutingTask(project.id);
+      if (executing && executing.id === taskId) {
+        targetProject = project;
+        targetTask = executing;
+        break;
+      }
+    }
+    
+    if (!targetProject || !targetTask) {
+      return res.status(404).json({ 
+        error: '任务不存在或已完成', 
+        task_id: taskId 
+      });
+    }
+    
+    try {
+      const result = await taskQueue.completeTask(targetProject.id, {
+        message: message,
+        files_changed: [],
+        completed_at: new Date().toISOString(),
+        completed_by_agent: true
+      });
+      
+      res.json({
+        success: true,
+        message: '任务状态已更新为完成',
+        project_id: targetProject.id,
+        task: targetTask
+      });
+    } catch (err) {
+      res.status(500).json({ 
+        error: '更新任务状态失败', 
+        message: err.message 
+      });
+    }
+  });
+  
+  // 任务失败回调
+  router.post('/tasks/:taskId/fail', async (req, res) => {
+    const { taskId } = req.params;
+    const { error = '任务执行失败', retry = true } = req.body;
+    
+    console.log(`[API] 任务失败回调: ${taskId}, error: ${error}, retry: ${retry}`);
+    
+    // 查找任务所属项目
+    const config = getConfig();
+    let targetProject = null;
+    let targetTask = null;
+    
+    for (const project of config.monitored_projects) {
+      const executing = taskQueue.getExecutingTask(project.id);
+      if (executing && executing.id === taskId) {
+        targetProject = project;
+        targetTask = executing;
+        break;
+      }
+    }
+    
+    if (!targetProject || !targetTask) {
+      return res.status(404).json({ 
+        error: '任务不存在或已完成', 
+        task_id: taskId 
+      });
+    }
+    
+    try {
+      const result = await taskQueue.reportError(targetProject.id, error, retry);
+      
+      res.json({
+        success: true,
+        message: '任务失败状态已记录',
+        project_id: targetProject.id,
+        task: targetTask,
+        result
+      });
+    } catch (err) {
+      res.status(500).json({ 
+        error: '更新任务状态失败', 
+        message: err.message 
+      });
+    }
+  });
 
   return router;
 }

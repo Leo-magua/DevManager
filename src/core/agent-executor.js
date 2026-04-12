@@ -10,6 +10,7 @@ const { getConfig } = require('../config');
 const { getTaskQueue } = require('./task-queue');
 const { broadcast, broadcastTerminal } = require('../websocket/broadcast');
 const terminalBuffer = require('../websocket/terminal-buffer');
+const { shellManager } = require('../websocket/shell-manager');
 
 const EXECUTOR_LOG_PATH = path.join(__dirname, '../..', 'data', 'executor.log');
 
@@ -18,6 +19,21 @@ class AgentExecutor {
     this.executingProjects = new Set();
     this.processes = {};
     this.stoppedProjects = new Set(); // 记录被手动停止的项目
+    
+    // 注册任务完成回调，用于自动执行下一个排队中的任务
+    const taskQueue = getTaskQueue();
+    taskQueue.setTaskCompletedHandler((projectId) => this._onTaskCompleted(projectId));
+  }
+
+  /**
+   * 任务完成后的回调 - 尝试执行下一个排队中的任务
+   */
+  async _onTaskCompleted(projectId) {
+    // 延迟2秒后尝试执行下一个任务，给系统一些清理时间
+    setTimeout(() => {
+      console.log(`[AgentExecutor] 任务完成，尝试执行 ${projectId} 的下一个任务`);
+      this.tryExecute(projectId);
+    }, 2000);
   }
 
   async tryExecute(projectId = null) {
@@ -90,13 +106,18 @@ class AgentExecutor {
 
   async executeTask(projectId, task) {
     const taskQueue = getTaskQueue();
+    const taskMonitor = require('../services/task-monitor').getTaskMonitor();
     this.executingProjects.add(projectId);
+    
+    // 记录任务开始时间，用于超时检测
+    taskMonitor.recordTaskStart(projectId);
     
     const config = getConfig();
     const project = config.monitored_projects.find(p => p.id === projectId);
     if (!project) {
       await taskQueue.reportError(projectId, '项目配置不存在');
       this.executingProjects.delete(projectId);
+      taskMonitor.clearTaskStart(projectId);
       return;
     }
 
@@ -125,6 +146,13 @@ class AgentExecutor {
     } finally {
       this.executingProjects.delete(projectId);
       delete this.processes[projectId];
+      
+      // 清理任务开始时间记录
+      const taskMonitor = require('../services/task-monitor').getTaskMonitor();
+      taskMonitor.clearTaskStart(projectId);
+      
+      // 任务结束后恢复持久 shell（让用户可以继续交互）
+      shellManager.resume(projectId);
       
       // 只有未被手动停止时才继续执行下一个任务
       if (!this.stoppedProjects.has(projectId)) {
@@ -199,6 +227,7 @@ class AgentExecutor {
 【任务】${task.feature_name}
 【描述】${task.feature_desc || '无详细描述'}
 【类别】${task.category}
+【任务ID】${task.id}
 
 请按以下步骤执行：
 1. 先读取项目结构和现有代码
@@ -207,11 +236,23 @@ class AgentExecutor {
 4. 测试确保功能正常
 5. 完成后报告结果
 
+【重要 - 任务完成后必须执行】
+任务完成后，请执行以下命令更新任务状态为已完成：
+  curl -X POST "http://localhost:${getConfig().app.port || 81}/api/tasks/${task.id}/complete" \
+    -H "Content-Type: application/json" \
+    -d '{"message": "任务完成描述"}'
+
+或者如果任务失败需要重试：
+  curl -X POST "http://localhost:${getConfig().app.port || 81}/api/tasks/${task.id}/fail" \
+    -H "Content-Type: application/json" \
+    -d '{"error": "失败原因", "retry": true}'
+
 注意：
 - 保持代码风格一致
 - 添加必要的注释
 - 确保不破坏现有功能
 - 如果有依赖需要先安装
+- **最后一步必须调用API更新任务状态，否则系统会认为任务还在执行中**
 
 请开始开发。`;
   }
@@ -219,6 +260,8 @@ class AgentExecutor {
   async runKimiAgent(projectId, prompt, projectPath, task) {
     return new Promise((resolve) => {
       const startTime = Date.now();
+      let outputBuffer = '';
+      let taskCompletedDetected = false;
       
       const promptFile = path.join(__dirname, '../..', 'data', `prompt-${task.id}.txt`);
       fs.writeFileSync(promptFile, prompt);
@@ -240,9 +283,23 @@ class AgentExecutor {
       });
       
       this.processes[projectId] = ptyProcess;
+      // 暂停持久 shell 输出，避免与任务输出混淆
+      shellManager.pause(projectId);
+      
       terminalBuffer.init(projectId, task.id);
       
       ptyProcess.write(`${kimiCmd} -y --no-thinking -p ${promptFile}\r`);
+      
+      // 任务完成检测关键词
+      const successPatterns = [
+        /修改完成|修改已成功|已成功修改/i,
+        /任务已完成|任务完成|开发完成/i,
+        /已完成.*移除|已成功.*删除/i,
+        /总结.*修改|修改总结/i,
+        /功能已实现|已实现.*功能/i,
+        /代码已提交|已提交.*代码/i,
+        /To resume this session/i
+      ];
       
       ptyProcess.onData(async (data) => {
         terminalBuffer.append(projectId, data);
@@ -250,25 +307,58 @@ class AgentExecutor {
         
         // 记录到本地日志文件
         fs.appendFileSync(EXECUTOR_LOG_PATH, data);
+        
+        // 收集输出用于检测任务完成
+        outputBuffer += data;
+        // 保持缓冲区大小合理（保留最后 10KB）
+        if (outputBuffer.length > 10240) {
+          outputBuffer = outputBuffer.slice(-10240);
+        }
+        
+        // 检测任务是否已完成
+        if (!taskCompletedDetected) {
+          for (const pattern of successPatterns) {
+            if (pattern.test(outputBuffer)) {
+              taskCompletedDetected = true;
+              console.log(`[AgentExecutor] ${projectId} 检测到任务完成标记`);
+              break;
+            }
+          }
+        }
       });
       
       ptyProcess.onExit(async ({ exitCode }) => {
         try { fs.unlinkSync(promptFile); } catch {}
-        terminalBuffer.close(projectId);
         
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        
+        // 根据退出码/完成标记写入终端状态消息（切换项目后仍可回看历史）
+        const isSuccess = exitCode === 0 || taskCompletedDetected;
+        const exitIcon = isSuccess ? '\u2713' : '\u2717';
+        const exitColor = isSuccess ? '\x1b[32m' : '\x1b[31m';
+        const exitMsg = `\r\n${exitColor}[${exitIcon} 任务${isSuccess ? '完成' : '结束'} | 退出码: ${exitCode} | 耗时: ${duration}s]\x1b[0m\r\n`;
+        terminalBuffer.append(projectId, exitMsg);
+        terminalBuffer.close(projectId, exitCode);
         
         broadcast('terminal_exit', {
           project_id: projectId,
           task_id: task.id,
           code: exitCode,
-          duration: duration
+          duration: duration,
+          success: isSuccess,
+          task_name: task.feature_name
         });
         
-        if (exitCode === 0) {
+        // 判断任务成功的条件：
+        // 1. exitCode === 0，或者
+        // 2. 在输出中检测到任务完成标记
+        if (isSuccess) {
+          const successMessage = taskCompletedDetected 
+            ? `开发完成 (检测到完成标记，耗时${duration}秒)`
+            : `开发完成 (耗时${duration}秒)`;
           resolve({
             success: true,
-            message: `开发完成 (耗时${duration}秒)`,
+            message: successMessage,
             files_changed: []
           });
         } else {

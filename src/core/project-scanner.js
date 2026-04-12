@@ -19,14 +19,59 @@ class ProjectScanner {
     const results = {
       scanned: 0,
       added: [],
+      removed: [],
       updated: [],
       errors: [],
       timestamp: new Date().toISOString()
     };
 
     try {
+      // 1. 扫描目录获取实际存在的项目
       const entries = await fs.readdir(config.projects_root, { withFileTypes: true });
+      const existingProjectPaths = new Set();
+      const existingProjectIds = new Set();
       
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name === 'DevManager') continue;
+        
+        const projectPath = path.join(config.projects_root, entry.name);
+        existingProjectPaths.add(projectPath);
+        existingProjectIds.add(entry.name.toLowerCase());
+      }
+      
+      // 2. 清理已不存在的项目（同步机制的关键）
+      const originalCount = config.monitored_projects.length;
+      const validMonitored = [];
+      const seenIds = new Set();
+      
+      for (const p of config.monitored_projects) {
+        const pIdLower = p.id.toLowerCase();
+        
+        // 跳过重复ID的项目
+        if (seenIds.has(pIdLower)) {
+          console.log(`[ProjectScanner] 跳过重复项目: ${p.id}`);
+          continue;
+        }
+        
+        // 检查项目是否仍然存在（通过路径或ID）
+        const pathExists = existingProjectPaths.has(p.path);
+        const idExists = existingProjectIds.has(pIdLower);
+        
+        if (pathExists || idExists) {
+          seenIds.add(pIdLower);
+          validMonitored.push(p);
+        } else {
+          results.removed.push({ id: p.id, name: p.name, path: p.path });
+          console.log(`[ProjectScanner] 清理已删除项目: ${p.id} (${p.name})`);
+        }
+      }
+      
+      if (results.removed.length > 0) {
+        config.monitored_projects = validMonitored;
+      }
+      
+      // 3. 处理新增项目
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         if (entry.name === 'DevManager') continue;
@@ -46,7 +91,7 @@ class ProjectScanner {
           }
 
           const existingProject = config.monitored_projects.find(p => 
-            p.id === entry.name.toLowerCase() || p.path === projectPath
+            p.id.toLowerCase() === entry.name.toLowerCase() || p.path === projectPath
           );
 
           if (!existingProject) {
@@ -58,11 +103,12 @@ class ProjectScanner {
         }
       }
 
-      if (results.added.length > 0) {
+      // 4. 保存配置（如果有新增或删除）
+      if (results.added.length > 0 || results.removed.length > 0) {
         await saveConfig();
       }
 
-      console.log(`[ProjectScanner] 扫描完成: ${results.scanned} 个目录, ${results.added.length} 个新增, ${results.updated.length} 个更新`);
+      console.log(`[ProjectScanner] 扫描完成: ${results.scanned} 个目录, ${results.added.length} 个新增, ${results.removed.length} 个删除, ${results.updated.length} 个更新`);
       broadcast('scan_complete', results);
       
     } catch (err) {

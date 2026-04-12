@@ -19,9 +19,73 @@ class TaskQueue {
     // 只在内存中维护当前执行状态，不持久化
     this.executingTasks = new Map(); // projectId -> taskInfo
     this.globalPaused = false;
+    // ID生成锁：防止并发请求或批量创建产生重复ID
+    this._lastKnownMaxId = 0;
+    this._idGenLock = false;
+    // 任务完成后的回调，用于触发执行下一个任务
+    this._onTaskCompleted = null;
   }
 
   /**
+   * 设置任务完成后的回调函数
+   * @param {Function} callback - 回调函数，接收 projectId 作为参数
+   */
+  setTaskCompletedHandler(callback) {
+    this._onTaskCompleted = callback;
+  }
+
+  /**
+   * 生成全局唯一的任务ID
+   * 扫描所有项目的 feature_list，找出最大的ID数字，然后+1
+   * @returns {Promise<string>} 新的任务ID，格式如 F001, F002...
+   */
+  async generateGlobalFeatureId() {
+    // 自旋等待锁释放，防止并发请求或批量循环中重复读取同一最大值
+    const lockTimeout = Date.now() + 5000;
+    while (this._idGenLock) {
+      await new Promise(r => setTimeout(r, 10));
+      if (Date.now() > lockTimeout) break;
+    }
+    this._idGenLock = true;
+
+    try {
+      const config = getConfig();
+      // 从内存已知最大值开始，避免并发时读到相同磁盘数据
+      let maxIdNum = this._lastKnownMaxId;
+
+      // 扫描所有监控项目的 dev_state.json
+      for (const project of config.monitored_projects) {
+        if (!project.active) continue;
+
+        try {
+          const devStatePath = path.join(project.path, project.key_files?.dev_state || 'dev_state.json');
+          const data = await fs.readFile(devStatePath, 'utf-8');
+          const devState = JSON.parse(data);
+          const features = devState.feature_list || [];
+
+          for (const feature of features) {
+            if (feature.id && feature.id.startsWith('F')) {
+              const num = parseInt(feature.id.slice(1), 10);
+              if (!isNaN(num) && num > maxIdNum) {
+                maxIdNum = num;
+              }
+            }
+          }
+        } catch (err) {
+          // 项目可能没有 dev_state.json，忽略错误
+        }
+      }
+
+      // 新ID = 最大ID + 1，并立即更新内存计数（下次调用以此为基准）
+      const newIdNum = maxIdNum + 1;
+      this._lastKnownMaxId = newIdNum;
+      return `F${String(newIdNum).padStart(3, '0')}`;
+    } finally {
+      this._idGenLock = false;
+    }
+  }
+
+    /**
    * 从项目的 dev_state.json 读取 feature_list
    */
   async getProjectFeatures(projectId) {
@@ -218,21 +282,22 @@ class TaskQueue {
       taskInfo = this._toTaskInfo(projectId, firstQueued);
     }
     
-    // 更新 dev_state.json
-    await this.updateFeatureStatus(projectId, taskInfo.feature_id, 'In_Progress', {
-      agent_task_id: taskInfo.id,
-      task_name: taskInfo.feature_name,
-      start_time: new Date().toISOString(),
-      agent_info: agentInfo
-    });
-
-    // 记录到内存
+    // 先记录到内存，再更新文件，避免竞争条件
+    //（如果先写文件，dashboard API 可能在内存更新前读取到不一致的状态）
     this.executingTasks.set(projectId, {
       ...taskInfo,
       started_at: new Date().toISOString(),
       agent_info: agentInfo,
       error_count: 0,
       last_error: null
+    });
+
+    // 更新 dev_state.json
+    await this.updateFeatureStatus(projectId, taskInfo.feature_id, 'In_Progress', {
+      agent_task_id: taskInfo.id,
+      task_name: taskInfo.feature_name,
+      start_time: new Date().toISOString(),
+      agent_info: agentInfo
     });
 
     broadcast('task_started', { project_id: projectId, task: taskInfo });
@@ -266,6 +331,15 @@ class TaskQueue {
     this.executingTasks.delete(projectId);
 
     broadcast('task_completed', { project_id: projectId, task: executing, result });
+    
+    // 触发任务完成回调，用于执行下一个排队中的任务
+    if (this._onTaskCompleted) {
+      try {
+        await this._onTaskCompleted(projectId);
+      } catch (err) {
+        console.error('[TaskQueue] 任务完成回调执行失败:', err.message);
+      }
+    }
     
     return { success: true, task: executing };
   }

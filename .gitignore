@@ -10,3 +10,4 @@ backups/*.bak-corrupt
 .env
 *.pid
 nohup.out
+*.bak

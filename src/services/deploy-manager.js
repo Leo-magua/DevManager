@@ -3,6 +3,9 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
+const util = require('util');
+const execAsync = util.promisify(exec);
 const { getConfig } = require('../config');
 
 class DeployServiceManager {
@@ -22,7 +25,68 @@ class DeployServiceManager {
     fs.writeFileSync(pidFile, String(pid));
   }
 
-  getRunningServices(projectId) {
+  /**
+   * 检查端口是否被占用
+   */
+  async isPortInUse(port) {
+    try {
+      const { stdout } = await execAsync(`lsof -i :${port} | grep LISTEN | wc -l`);
+      return parseInt(stdout.trim()) > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 获取占用端口的进程信息
+   */
+  async getPortProcessInfo(port) {
+    try {
+      const { stdout } = await execAsync(`lsof -i :${port} -sTCP:LISTEN -t`);
+      const pid = parseInt(stdout.trim());
+      if (pid) {
+        try {
+          // 获取进程命令行信息
+          const { stdout: cmdline } = await execAsync(`ps -p ${pid} -o command=`);
+          return { pid, command: cmdline.trim() };
+        } catch {
+          return { pid, command: 'unknown' };
+        }
+      }
+    } catch {}
+    return null;
+  }
+
+  /**
+   * 从项目配置中获取部署端口
+   */
+  getProjectPort(projectId) {
+    try {
+      const config = getConfig();
+      const project = config.monitored_projects.find(p => p.id === projectId);
+      if (!project) return null;
+
+      // 尝试读取 nginx 配置中的端口
+      const nginxConfigPath = path.join(project.path, '.devmanager', 'nginx-config.json');
+      if (fs.existsSync(nginxConfigPath)) {
+        const deployConfig = JSON.parse(fs.readFileSync(nginxConfigPath, 'utf-8'));
+        return deployConfig.port;
+      }
+
+      // 基于项目名生成确定性端口 (3000-9000)
+      let hash = 0;
+      for (let i = 0; i < projectId.length; i++) {
+        hash = ((hash << 5) - hash) + projectId.charCodeAt(i);
+        hash = hash & hash;
+      }
+      const portRange = 6000; // 3000-9000
+      return 3000 + (Math.abs(hash) % portRange);
+    } catch {
+      return null;
+    }
+  }
+
+  async getRunningServices(projectId) {
     const config = getConfig();
     const services = [];
     const seenPids = new Set();
@@ -30,6 +94,7 @@ class DeployServiceManager {
     const project = config.monitored_projects.find(p => p.id === projectId);
     const projectPath = project ? project.path : path.join(config.projects_root, projectId);
     
+    // 1. 检查 PID 文件（DevManager 启动的服务）
     const pidDirs = [
       this.pidsDir,
       path.join(projectPath, '.devmanager', 'pids')
@@ -52,12 +117,31 @@ class DeployServiceManager {
           
           const isRunning = this.isProcessRunning(pid);
           if (isRunning) {
-            services.push({ taskId, pid, status: 'running' });
+            services.push({ taskId, pid, status: 'running', source: 'pid_file' });
           } else {
             try { fs.unlinkSync(pidFile); } catch {}
           }
         }
       } catch (err) {}
+    }
+
+    // 2. 检查端口占用（检测手动启动的服务）
+    const port = this.getProjectPort(projectId);
+    if (port) {
+      const isRunning = await this.isPortInUse(port);
+      if (isRunning) {
+        const processInfo = await this.getPortProcessInfo(port);
+        if (processInfo && !seenPids.has(processInfo.pid)) {
+          services.push({
+            taskId: `manual-${port}`,
+            pid: processInfo.pid,
+            status: 'running',
+            source: 'port_detection',
+            port: port,
+            command: processInfo.command
+          });
+        }
+      }
     }
     
     return services;
@@ -96,8 +180,8 @@ class DeployServiceManager {
     return { success: false, error: '未找到服务记录' };
   }
 
-  stopAllServices(projectId) {
-    const services = this.getRunningServices(projectId);
+  async stopAllServices(projectId) {
+    const services = await this.getRunningServices(projectId);
     const results = [];
     
     for (const svc of services) {

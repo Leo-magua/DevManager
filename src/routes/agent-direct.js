@@ -53,9 +53,9 @@ router.post('/direct', async (req, res) => {
     const devData = await fs.readFile(devStatePath, 'utf-8');
     const devState = JSON.parse(devData);
 
-    // 生成新ID
-    const featureNum = (devState.feature_list?.length || 0) + 1;
-    const newId = `F${String(featureNum).padStart(3, '0')}`;
+    // 生成新ID - 使用全局唯一ID
+    const taskQueue = getTaskQueue();
+    const newId = await taskQueue.generateGlobalFeatureId();
     
     const now = new Date().toISOString();
     
@@ -222,8 +222,9 @@ async function createDirectFeature(projectId, featureData) {
   const devData = await fs.readFile(devStatePath, 'utf-8');
   const devState = JSON.parse(devData);
 
-  const featureNum = (devState.feature_list?.length || 0) + 1;
-  const newId = `F${String(featureNum).padStart(3, '0')}`;
+  // 生成新ID - 使用全局唯一ID
+  const taskQueue = getTaskQueue();
+  const newId = await taskQueue.generateGlobalFeatureId();
   const now = new Date().toISOString();
 
   const newFeature = {
