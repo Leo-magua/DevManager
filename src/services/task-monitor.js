@@ -21,6 +21,7 @@ class TaskMonitor {
   constructor() {
     this.interval = null;
     this.taskStartTimes = new Map(); // projectId -> startTime
+    this.lastActivityTime = new Map(); // projectId -> 最后一次任务活动时间（用于检测队列卡死）
   }
 
   start() {
@@ -44,12 +45,14 @@ class TaskMonitor {
   // 记录任务开始时间
   recordTaskStart(projectId) {
     this.taskStartTimes.set(projectId, Date.now());
+    this.lastActivityTime.set(projectId, Date.now()); // 更新最后活动时间
     console.log('[TaskMonitor] 记录任务开始时间: ' + projectId);
   }
 
   // 清除任务开始时间
   clearTaskStart(projectId) {
     this.taskStartTimes.delete(projectId);
+    this.lastActivityTime.set(projectId, Date.now()); // 任务结束也算活动
   }
 
   async check() {
@@ -69,6 +72,23 @@ class TaskMonitor {
       if (!executing) {
         // 没有执行中的任务，清理时间记录
         this.clearTaskStart(projectId);
+        
+        // 兜底：检查是否有 Queued 任务卡死（队列推进链断裂）
+        try {
+          const status = await taskQueue.getStatus(projectId);
+          if (status.queued_count > 0 && !agentExecutor.executingProjects.has(projectId)) {
+            const lastActivity = this.lastActivityTime.get(projectId) || 0;
+            const idleMinutes = Math.round((Date.now() - lastActivity) / 60000);
+            if (lastActivity === 0 || (Date.now() - lastActivity) > 10 * 60 * 1000) {
+              console.warn(`[TaskMonitor] ⚠️ ${projectId} 检测到队列卡死：${status.queued_count} 个任务已等待 ${idleMinutes} 分钟，触发兜底推进`);
+              agentExecutor.tryExecute(projectId);
+              this.lastActivityTime.set(projectId, Date.now()); // 更新，避免重复触发
+            }
+          }
+        } catch (e) {
+          console.error('[TaskMonitor] 检查 Queued 卡死时出错:', e.message);
+        }
+        
         continue;
       }
       
@@ -183,16 +203,24 @@ class TaskMonitor {
       delete agentExecutor.processes[projectId];
       this.clearTaskStart(projectId);
       
+      // 触发推进下一个任务（completeTask 的回调只做状态清除，推进由此处负责）
+      if (!agentExecutor.stoppedProjects.has(projectId)) {
+        console.log('[TaskMonitor] ' + projectId + ': 兜底完成，2秒后推进队列');
+        setTimeout(() => agentExecutor.tryExecute(projectId), 2000);
+      }
+      
     } else {
       console.log('[TaskMonitor] ⚠️ ' + projectId + ': 进程已结束但未检测到完成标记，标记为失败');
       
+      let needsRetryDelay = false;
       // 检查重试次数
       if (executing.error_count >= 2) {
-        // 已经重试过多次，标记为失败
+        // 已经重试过多次，标记为失败（变 Pending）
         await taskQueue.reportError(projectId, 'AI兜底监测：进程异常结束，未检测到完成标记', false);
       } else {
         // 重新入队重试
         await taskQueue.requeueForRetry(projectId);
+        needsRetryDelay = true;
         console.log('[TaskMonitor] ' + projectId + ': 任务已重新入队等待重试');
       }
       
@@ -200,6 +228,19 @@ class TaskMonitor {
       agentExecutor.executingProjects.delete(projectId);
       delete agentExecutor.processes[projectId];
       this.clearTaskStart(projectId);
+      
+      // 无论哪种路径都需要触发推进，否则其他 Queued 任务会永久卡住
+      if (!agentExecutor.stoppedProjects.has(projectId)) {
+        if (needsRetryDelay) {
+          // 重新入队的失败任务，30秒冷却后重试
+          console.log('[TaskMonitor] ' + projectId + ': 兜底重入队，30秒后尝试推进队列');
+          setTimeout(() => agentExecutor.tryExecute(null), 30 * 1000);
+        } else {
+          // 已标记为 Pending，推进其他 Queued 任务
+          console.log('[TaskMonitor] ' + projectId + ': 兜底失败处理完毕，2秒后推进队列');
+          setTimeout(() => agentExecutor.tryExecute(null), 2000);
+        }
+      }
     }
   }
 

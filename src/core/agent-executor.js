@@ -29,11 +29,9 @@ class AgentExecutor {
    * 任务完成后的回调 - 尝试执行下一个排队中的任务
    */
   async _onTaskCompleted(projectId) {
-    // 延迟2秒后尝试执行下一个任务，给系统一些清理时间
-    setTimeout(() => {
-      console.log(`[AgentExecutor] 任务完成，尝试执行 ${projectId} 的下一个任务`);
-      this.tryExecute(projectId);
-    }, 2000);
+    // 只做状态清除，不触发下一个任务
+    // 推进下一个任务统一由 executeTask 的 finally 块负责，避免双重触发
+    this.executingProjects.delete(projectId);
   }
 
   async tryExecute(projectId = null) {
@@ -108,6 +106,7 @@ class AgentExecutor {
     const taskQueue = getTaskQueue();
     const taskMonitor = require('../services/task-monitor').getTaskMonitor();
     this.executingProjects.add(projectId);
+    let isRequeue = false; // 标记任务是否重新入队（需要冷却后重试，而非立刻推进）
     
     // 记录任务开始时间，用于超时检测
     taskMonitor.recordTaskStart(projectId);
@@ -126,7 +125,10 @@ class AgentExecutor {
       
       await taskQueue.addChangelog(projectId, 'system', `开始开发任务: ${task.feature_name}`);
 
-      const result = await this.runKimiAgent(projectId, prompt, project.path, task);
+      const toolType = task.toolType || 'kimi';
+      const result = toolType === 'cursor'
+        ? await this.runCursorAgent(projectId, prompt, project.path, task)
+        : await this.runKimiAgent(projectId, prompt, project.path, task);
       
       if (result.success) {
         await taskQueue.completeTask(projectId, {
@@ -138,6 +140,7 @@ class AgentExecutor {
         // 如果是重试模式，重新入队而不是卡屏在 In_Progress
         if (retryResult && retryResult.status === 'retry') {
           await taskQueue.requeueForRetry(projectId);
+          isRequeue = true; // 任务重新入队，需要冷却后重试
         }
       }
     } catch (err) {
@@ -156,7 +159,14 @@ class AgentExecutor {
       
       // 只有未被手动停止时才继续执行下一个任务
       if (!this.stoppedProjects.has(projectId)) {
-        setTimeout(() => this.tryExecute(projectId), 2000);
+        if (isRequeue) {
+          // 重新入队的失败任务需要冷却30秒，避免立刻重试同一个任务
+          console.log(`[AgentExecutor] ${projectId} 任务重新入队等待重试，30秒后尝试推进队列`);
+          setTimeout(() => this.tryExecute(null), 30 * 1000);
+        } else {
+          // 正常完成或不重试的错误，2秒后推进下一个任务
+          setTimeout(() => this.tryExecute(projectId), 2000);
+        }
       } else {
         console.log(`[AgentExecutor] ${projectId} 被标记为停止，不继续执行下一个任务`);
       }
@@ -373,6 +383,119 @@ class AgentExecutor {
       setTimeout(() => {
         if (this.processes[projectId]) {
           console.log(`[AgentExecutor] ${projectId} 任务执行超时，强制终止`);
+          this.processes[projectId].kill('SIGTERM');
+        }
+      }, 25 * 60 * 1000);
+    });
+  }
+
+
+  async runCursorAgent(projectId, prompt, projectPath, task) {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      let outputBuffer = '';
+      let taskCompletedDetected = false;
+
+      const promptFile = path.join(__dirname, '../..', 'data', `prompt-${task.id}.txt`);
+      fs.writeFileSync(promptFile, prompt);
+
+      const cursorCmd = process.env.CURSOR_CMD || 'cursor-agent';
+      const shell = process.env.SHELL || 'bash';
+
+      const ptyProcess = pty.spawn(shell, [], {
+        name: 'xterm-256color',
+        cols: 120,
+        rows: 40,
+        cwd: projectPath,
+        env: {
+          ...process.env,
+          TERM: 'xterm-256color',
+          FORCE_COLOR: '1'
+        }
+      });
+
+      this.processes[projectId] = ptyProcess;
+      shellManager.pause(projectId);
+      terminalBuffer.init(projectId, task.id);
+
+      // cursor-agent 使用 -p 参数传入提示词文本（通过 $() 读取文件内容）
+      ptyProcess.write(`cursor-run "${promptFile}" "${projectPath}"\r`);
+
+      const successPatterns = [
+        /修改完成|修改已成功|已成功修改/i,
+        /任务已完成|任务完成|开发完成/i,
+        /已完成.*移除|已成功.*删除/i,
+        /总结.*修改|修改总结/i,
+        /功能已实现|已实现.*功能/i,
+        /代码已提交|已提交.*代码/i,
+        /Task completed|Done[."|]|Finished[."|]/i,
+        /To resume this session/i
+      ];
+
+      ptyProcess.onData(async (data) => {
+        terminalBuffer.append(projectId, data);
+        broadcastTerminal(projectId, data);
+        fs.appendFileSync(EXECUTOR_LOG_PATH, data);
+
+        outputBuffer += data;
+        if (outputBuffer.length > 10240) {
+          outputBuffer = outputBuffer.slice(-10240);
+        }
+
+        if (!taskCompletedDetected) {
+          for (const pattern of successPatterns) {
+            if (pattern.test(outputBuffer)) {
+              taskCompletedDetected = true;
+              console.log(`[AgentExecutor] ${projectId} (cursor) 检测到任务完成标记`);
+              break;
+            }
+          }
+        }
+      });
+
+      ptyProcess.onExit(async ({ exitCode }) => {
+        try { fs.unlinkSync(promptFile); } catch {}
+
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        const isSuccess = exitCode === 0 || taskCompletedDetected;
+        const exitIcon = isSuccess ? '✓' : '✗';
+        const exitColor = isSuccess ? '[32m' : '[31m';
+        const exitMsg = `
+${exitColor}[${exitIcon} 任务${isSuccess ? '完成' : '结束'} | cursor | 退出码: ${exitCode} | 耗时: ${duration}s][0m
+`;
+        terminalBuffer.append(projectId, exitMsg);
+        terminalBuffer.close(projectId, exitCode);
+
+        broadcast('terminal_exit', {
+          project_id: projectId,
+          task_id: task.id,
+          code: exitCode,
+          duration: duration,
+          success: isSuccess,
+          task_name: task.feature_name
+        });
+
+        if (isSuccess) {
+          const successMessage = taskCompletedDetected
+            ? `开发完成 (cursor, 检测到完成标记，耗时${duration}秒)`
+            : `开发完成 (cursor, 耗时${duration}秒)`;
+          resolve({
+            success: true,
+            message: successMessage,
+            files_changed: []
+          });
+        } else {
+          resolve({
+            success: false,
+            error: `cursor 退出码: ${exitCode}`,
+            retry: true
+          });
+        }
+      });
+
+      setTimeout(() => {
+        if (this.processes[projectId]) {
+          console.log(`[AgentExecutor] ${projectId} (cursor) 任务执行超时，强制终止`);
           this.processes[projectId].kill('SIGTERM');
         }
       }, 25 * 60 * 1000);

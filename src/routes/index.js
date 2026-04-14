@@ -416,6 +416,14 @@ function createRoutes() {
       files_changed: files_changed || [],
       completed_at: new Date().toISOString()
     });
+
+    // [FIX] 同 /tasks/:taskId/complete 修复：确保执行锁被清除并触发下一任务推进
+    agentExecutor.executingProjects.delete(project_id);
+    console.log("[API] /queue/complete triggered: cleared lock for " + project_id + ", promoting next queued task");
+    setTimeout(() => {
+      agentExecutor.tryExecute(project_id);
+    }, 500);
+
     res.json(completion);
   });
 
@@ -830,6 +838,7 @@ function createRoutes() {
   router.post('/projects/:projectId/features/:featureId/start', async (req, res) => {
     const config = getConfig();
     const { projectId, featureId } = req.params;
+    const { tool_type = 'kimi' } = req.body || {};
     
     try {
       const project = config.monitored_projects.find(p => p.id === projectId);
@@ -884,6 +893,7 @@ function createRoutes() {
         return res.status(400).json({ error: claimResult.error });
       }
 
+      claimResult.task.toolType = tool_type;
       agentExecutor.executeTask(projectId, claimResult.task).catch((err) => {
         console.error('[API] features/start executeTask:', err);
       });
@@ -1213,13 +1223,10 @@ function createRoutes() {
         return res.status(404).json({ error: '功能项不存在' });
       }
 
-      const inProgress = taskQueue.getProjectInProgress(projectId);
-      if (inProgress && inProgress.feature_id === featureId) {
+      const executing = taskQueue.getExecutingTask(projectId);
+      if (executing && executing.feature_id === featureId) {
         return res.status(400).json({ error: '任务正在执行中，无法删除' });
       }
-
-      // 清理队列中的相关任务
-      await taskQueue.cleanupFeatureTasks(projectId, featureId);
 
       const deletedFeature = devState.feature_list.splice(featureIndex, 1)[0];
       
@@ -1871,7 +1878,17 @@ function createRoutes() {
         completed_at: new Date().toISOString(),
         completed_by_agent: true
       });
-      
+
+      // [FIX] PTY 进程在 /complete 被调用后仍可能存活，导致 executeTask 的 finally 块延迟运行。
+      // _onTaskCompleted 虽已清除 executingProjects，但 2s 定时器存在竞态风险。
+      // 此处在 API 返回前直接强制清除 executingProjects 并触发 tryExecute，
+      // 确保下一个 Queued 任务能立即被提升为 In_Progress。
+      agentExecutor.executingProjects.delete(targetProject.id);
+      console.log("[API] /complete 触发：强制清除 " + targetProject.id + " 的执行锁，准备推进下一个排队任务");
+      setTimeout(() => {
+        agentExecutor.tryExecute(targetProject.id);
+      }, 500);
+
       res.json({
         success: true,
         message: '任务状态已更新为完成',

@@ -242,7 +242,7 @@
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="bg-dark-800/50 rounded-lg p-3 border border-dark-600">
+          <div class="bg-dark-800/50 rounded-lg p-3 border border-dark-600 flex flex-col h-[420px]">
             <div class="text-xs font-medium text-amber-400 mb-3 flex items-center justify-between">
               <span>待处理</span>
               <div class="flex items-center gap-2">
@@ -252,21 +252,21 @@
                 </button>
               </div>
             </div>
-            <div id="col-pending" class="space-y-2 min-h-[100px]"></div>
+            <div id="col-pending" class="space-y-2 flex-1 overflow-y-auto min-h-0"></div>
           </div>
-          <div class="bg-dark-800/50 rounded-lg p-3 border border-dark-600">
+          <div class="bg-dark-800/50 rounded-lg p-3 border border-dark-600 flex flex-col h-[420px]">
             <div class="text-xs font-medium text-blue-400 mb-3 flex items-center justify-between">
               <span>开发队列</span>
               <span id="count-progress" class="bg-blue-500/20 px-1.5 py-0.5 rounded">0</span>
             </div>
-            <div id="col-progress" class="space-y-2 min-h-[100px]"></div>
+            <div id="col-progress" class="space-y-2 flex-1 overflow-y-auto min-h-0"></div>
           </div>
-          <div class="bg-dark-800/50 rounded-lg p-3 border border-dark-600">
+          <div class="bg-dark-800/50 rounded-lg p-3 border border-dark-600 flex flex-col h-[420px]">
             <div class="text-xs font-medium text-emerald-400 mb-3 flex items-center justify-between">
               <span>已完成</span>
               <span id="count-completed" class="bg-emerald-500/20 px-1.5 py-0.5 rounded">0</span>
             </div>
-            <div id="col-completed" class="space-y-2 min-h-[100px]"></div>
+            <div id="col-completed" class="space-y-2 flex-1 overflow-y-auto min-h-0"></div>
           </div>
         </div>
       </div>
@@ -353,6 +353,24 @@
         <div>
           <label class="block text-xs text-gray-500 mb-1">需求描述</label>
           <textarea id="modal-task-desc" rows="5" class="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white placeholder-gray-600 focus:border-accent focus:outline-none resize-none"></textarea>
+        </div>
+        <!-- 工具选择 -->
+        <div id="modal-tool-selector" class="pt-1">
+          <label class="block text-xs text-gray-500 mb-1.5">执行工具</label>
+          <div class="flex gap-3">
+            <label class="flex items-center gap-2 cursor-pointer group">
+              <input type="radio" name="modal_tool_type" value="kimi" checked
+                class="w-3.5 h-3.5 accent-accent cursor-pointer">
+              <span class="text-xs text-gray-300 group-hover:text-white transition-colors">Kimi</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">AI</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer group">
+              <input type="radio" name="modal_tool_type" value="cursor"
+                class="w-3.5 h-3.5 accent-accent cursor-pointer">
+              <span class="text-xs text-gray-300 group-hover:text-white transition-colors">Cursor</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">Agent</span>
+            </label>
+          </div>
         </div>
       </div>
       <div class="flex flex-wrap gap-2 justify-end">
@@ -1458,7 +1476,7 @@
             status: 'In_Progress'
           });
         } else {
-          list[idx] = { ...list[idx], status: 'In_Progress' };
+          list[idx] = { ...list[idx], status: 'In_Progress', toolType: live.tool_type || live.toolType || list[idx].toolType || '' };
         }
       }
 
@@ -1718,7 +1736,8 @@
             name: executingTask.feature_name,
             description: executingTask.feature_desc || '',
             status: 'In_Progress',
-            category: executingTask.category || '执行中'
+            category: executingTask.category || '执行中',
+            toolType: executingTask.tool_type || executingTask.toolType || ''
           });
         } else {
           list[idx] = { ...list[idx], status: 'In_Progress' };
@@ -1768,7 +1787,7 @@
           sideBtn = '';
         } else if (status === 'Pending' && !isRunner) {
           sideBtn = `
-            <button type="button" onclick="quickStartTask('${f.id}', event)"
+            <button type="button" onclick="quickStartTask('${f.id}')"
               class="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/35 border border-emerald-500/35 flex items-center justify-center transition-colors"
               title="执行开发">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -1785,6 +1804,11 @@
         const runnerBadge = isRunner
           ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/30 text-violet-200 border border-violet-500/40">执行中</span>'
           : (isQueued ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 font-medium">⏳ 排队</span>' : '');
+        const toolBadge = isRunner && f.toolType
+          ? (f.toolType === 'cursor'
+              ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">Cursor</span>'
+              : '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">Kimi</span>')
+          : '';
 
         // 简化的卡片布局 - 状态点在最右边
         card.innerHTML = `
@@ -1793,6 +1817,7 @@
               <div class="flex items-center gap-1.5">
                 <span class="text-[10px] text-accent font-mono">${f.id}</span>
                 ${runnerBadge}
+                ${toolBadge}
               </div>
               <div class="text-sm text-white font-medium truncate mt-0.5" title="${escapeHtml(f.name || '')}">${escapeHtml(f.name || '')}</div>
             </div>
@@ -1888,28 +1913,54 @@
     }
 
     // 快速开始任务（无需弹窗确认）
-    async function quickStartTask(featureId, event) {
-      event.stopPropagation();
-      if (!currentProject) return;
+    // 公共开发启动逻辑（弹窗和快捷按钮共用）
+    async function startDevelopment(featureId, options = {}) {
+      const { saveContent = false, name, description } = options;
+      
+      if (saveContent) {
+        try {
+          const putRes = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/content`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description })
+          });
+          const putData = await putRes.json();
+          if (!putData.success) {
+            showToast(putData.error || '保存需求失败', 'error');
+            return false;
+          }
+        } catch (err) {
+          showToast('保存需求失败: ' + err.message, 'error');
+          return false;
+        }
+      }
       
       try {
-        showToast('正在启动任务...', 'info');
-        
-        // 直接调用 start API
+        const toolType = document.querySelector('input[name="modal_tool_type"]:checked')?.value || 'kimi';
         const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/start`, {
-          method: 'POST'
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool_type: toolType })
         });
-        
         const data = await res.json();
         if (data.success) {
-          showToast(data.message || (data.queued ? '已加入开发队列' : '任务已开始'), 'success');
+          showToast('任务已加入开发队列', 'success');
           refreshAllData();
+          return true;
         } else {
           showToast(data.error || '启动失败', 'error');
+          return false;
         }
       } catch (err) {
         showToast('启动失败: ' + err.message, 'error');
+        return false;
       }
+    }
+
+    async function quickStartTask(featureId) {
+      if (!currentProject) return;
+      showToast('正在启动任务...', 'info');
+      await startDevelopment(featureId);
     }
 
     // 调整开发队列中的任务顺序
@@ -2101,6 +2152,9 @@
         btnStart.classList.add('hidden');
         btnSave.classList.remove('hidden');
       }
+      // 重置工具选择为默认 kimi
+      const kimiRadio = document.querySelector('input[name="modal_tool_type"][value="kimi"]');
+      if (kimiRadio) kimiRadio.checked = true;
       document.getElementById('start-modal').classList.remove('hidden');
     }
 
@@ -2140,36 +2194,8 @@
       const featureId = selectedFeature.id;
       const name = document.getElementById('modal-task-title').value.trim();
       const description = document.getElementById('modal-task-desc').value;
-      try {
-        const putRes = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/content`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description })
-        });
-        const putData = await putRes.json();
-        if (!putData.success) {
-          showToast(putData.error || '保存需求失败', 'error');
-          return;
-        }
-      } catch (err) {
-        showToast('保存需求失败: ' + err.message, 'error');
-        return;
-      }
       closeModal();
-      try {
-        const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/start`, {
-          method: 'POST'
-        });
-        const data = await res.json();
-        if (data.success) {
-          showToast('任务已加入开发队列', 'success');
-          refreshAllData();
-        } else {
-          showToast(data.error || '启动失败', 'error');
-        }
-      } catch (err) {
-        showToast('启动失败: ' + err.message, 'error');
-      }
+      await startDevelopment(featureId, { saveContent: true, name, description });
     }
 
     async function bulkBoardAction(action) {
