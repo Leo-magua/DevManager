@@ -1218,6 +1218,16 @@
       term.open(container);
       fitAddon.fit();
       
+      // 初始化后立即同步真实尺寸给后端，避免前后端列宽不一致导致流式输出折行错乱
+      if (currentProject && devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
+        devmanSocket.send(JSON.stringify({
+          type: 'terminal_resize',
+          project_id: currentProject,
+          cols: term.cols,
+          rows: term.rows
+        }));
+      }
+      
       // 键盘输入处理
       term.onData((data) => {
         if (currentProject && devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
