@@ -17,6 +17,10 @@
       }
     }
     async function toggleAutoScan(checkbox) {
+      if (!requireWriteAccess('修改扫描设置需要开发权限')) {
+        checkbox.checked = !checkbox.checked;
+        return;
+      }
       try {
         const res = await fetch(`${API_BASE}/api/scan/settings`, {
           method: 'POST',
@@ -36,6 +40,7 @@
       }
     }
     async function executeScan() {
+      if (!requireWriteAccess('执行项目扫描需要开发权限')) return;
       const btn = document.getElementById('scan-btn');
       const resultsDiv = document.getElementById('scan-results');
       const loadingDiv = document.getElementById('scan-loading');

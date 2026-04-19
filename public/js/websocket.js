@@ -1,6 +1,16 @@
     let devmanSocket = null;
     let wsThrottleTimer = null;
     let isFetchingLogs = false;
+    function restartWebSocketConnection() {
+      if (devmanSocket) {
+        try {
+          devmanSocket.onclose = null;
+          devmanSocket.close();
+        } catch (_) {}
+      }
+      devmanSocket = null;
+      connectWebSocket();
+    }
     function connectWebSocket() {
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${proto}//${window.location.host}`;
@@ -58,6 +68,11 @@
             // 终端错误（静默处理，shell 始终可用）
             if (t === 'terminal_error') {
               console.warn(`[终端错误] ${msg.project_id}: ${msg.error}`);
+              return;
+            }
+
+            if (t === 'auth_required') {
+              handleUnauthorized(msg.message || '终端写入需要开发权限');
               return;
             }
             

@@ -258,13 +258,14 @@
     }
     async function startDevelopment(featureId, options = {}) {
       const { saveContent = false, name, description, toolType } = options;
+      if (!requireWriteAccess('启动开发任务需要开发权限')) return false;
       
       if (saveContent) {
         try {
           const putRes = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/content`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, description })
+            body: JSON.stringify({ name, description, tool_type: toolType || null })
           });
           const putData = await putRes.json();
           if (!putData.success) {
@@ -304,6 +305,7 @@
     async function moveFeature(featureId, direction, event) {
       event.stopPropagation();
       if (!currentProject) return;
+      if (!requireWriteAccess('调整队列顺序需要开发权限')) return;
       try {
         const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/reorder`, {
           method: 'PUT',
@@ -322,6 +324,7 @@
     }
     async function handleQueuedReorder(e, col) {
       if (!draggedFeature || !currentProject) return;
+      if (!requireWriteAccess('调整队列顺序需要开发权限')) return;
       
       // 获取鼠标位置下的所有卡片
       const afterElement = getDragAfterElement(col, e.clientY);
@@ -382,6 +385,7 @@
     }
     async function updateFeatureStatus(featureId, newStatus) {
       if (!currentProject) return;
+      if (!requireWriteAccess('修改任务状态需要开发权限')) return;
       
       try {
         const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/status`, {
@@ -409,6 +413,7 @@
         showToast('请先选择项目', 'warning');
         return;
       }
+      if (!requireWriteAccess('批量调整看板需要开发权限')) return;
       const hints = {
         pending_to_progress: '将所有「待处理」按列表顺序加入开发队列，并自动启动队首任务（若当前无执行中且未暂停）。',
         progress_to_pending: '清空开发队列（排队+执行中）并全部退回「待处理」，并停止当前运行任务（若存在）。',

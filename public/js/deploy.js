@@ -53,6 +53,7 @@
       });
     }
     async function stopDeployService(taskId) {
+      if (!requireWriteAccess('停止部署服务需要开发权限')) return;
       if (!currentProject || !confirm('确定要停止这个部署服务吗？')) return;
       try {
         const res = await fetch(`${API_BASE}/api/deploy/${currentProject}/services/${taskId}/stop`, {
@@ -205,6 +206,7 @@
       });
     }
     async function startProject(projectId) {
+      if (!requireWriteAccess('启动项目需要开发权限')) return;
       try {
         showToast(`正在启动 ${projectId}...`, 'info');
         const res = await fetch(`${API_BASE}/api/deploy/${projectId}/start`, { method: 'POST' });
@@ -221,6 +223,7 @@
       }
     }
     async function stopProject(projectId) {
+      if (!requireWriteAccess('停止项目需要开发权限')) return;
       if (!confirm(`确定要停止 ${projectId} 吗？`)) return;
       
       try {
@@ -239,6 +242,7 @@
       }
     }
     async function editProjectPort(projectId, currentPort) {
+      if (!requireWriteAccess('修改项目端口需要开发权限')) return;
       const newPort = prompt(`修改 ${projectId} 的端口 (当前: ${currentPort}):`, currentPort);
       if (!newPort || newPort === String(currentPort)) return;
       
@@ -268,6 +272,7 @@
       }
     }
     async function generateNginxConfig() {
+      if (!requireWriteAccess('生成 Nginx 配置需要开发权限')) return;
       try {
         showToast('正在生成 Nginx 配置...', 'info');
         const res = await fetch(`${API_BASE}/api/nginx/generate-config`, { method: 'POST' });
@@ -284,6 +289,7 @@
       }
     }
     async function applyNginxConfig() {
+      if (!requireWriteAccess('应用 Nginx 配置需要开发权限')) return;
       if (!confirm('确定要应用 Nginx 配置并重载服务吗？')) return;
       
       try {

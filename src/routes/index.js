@@ -16,6 +16,15 @@ const { getDeployServiceManager } = require('../services/deploy-manager');
 const { getNLParser } = require('../services/nl-parser');
 const { getNginxManager } = require('../services/nginx-manager');
 const { getAIService } = require('../services/ai-service');
+const {
+  clearSession,
+  clearSessionCookie,
+  createSession,
+  getAuthStatus,
+  getConfiguredPassword,
+  requireWriteAccess,
+  setSessionCookie
+} = require('../auth');
 const { broadcast } = require('../websocket/broadcast');
 const terminalBuffer = require('../websocket/terminal-buffer');
 
@@ -111,6 +120,67 @@ function createRoutes() {
   const stateSync = getStateSync();
   const deployServiceManager = getDeployServiceManager();
   const nlParser = getNLParser();
+
+  const publicWriteMatchers = [
+    /^\/auth\/login$/,
+    /^\/auth\/logout$/,
+    /^\/tasks\/[^/]+\/complete$/,
+    /^\/tasks\/[^/]+\/fail$/,
+    /^\/queue\/claim$/,
+    /^\/queue\/complete$/,
+    /^\/queue\/error$/,
+    /^\/queue\/log$/
+  ];
+
+  router.use((req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+      return next();
+    }
+
+    if (publicWriteMatchers.some(pattern => pattern.test(req.path))) {
+      return next();
+    }
+
+    return requireWriteAccess(req, res, next);
+  });
+
+  router.get('/auth/status', (req, res) => {
+    res.json(getAuthStatus(req));
+  });
+
+  router.post('/auth/login', express.json(), (req, res) => {
+    const { password } = req.body || {};
+    const configuredPassword = getConfiguredPassword();
+
+    if (!configuredPassword) {
+      return res.status(503).json({
+        error: 'AUTH_NOT_CONFIGURED',
+        message: '开发权限密码尚未配置'
+      });
+    }
+
+    if (password !== configuredPassword) {
+      return res.status(401).json({
+        error: 'AUTH_INVALID',
+        message: '密码错误'
+      });
+    }
+
+    const session = createSession();
+    setSessionCookie(res, session.token, session.maxAge);
+
+    res.json({
+      success: true,
+      authenticated: true,
+      session_ttl_hours: getAuthStatus(req).session_ttl_hours
+    });
+  });
+
+  router.post('/auth/logout', (req, res) => {
+    clearSession(req);
+    clearSessionCookie(res);
+    res.json({ success: true, authenticated: false });
+  });
 
   // 健康检查
   router.get('/health', async (req, res) => {

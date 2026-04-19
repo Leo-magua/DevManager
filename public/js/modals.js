@@ -5,6 +5,7 @@
         showToast('请先选择项目', 'error');
         return;
       }
+      if (!requireWriteAccess('新增需求需要先输入开发密码')) return;
       document.getElementById('add-feature-modal').classList.remove('hidden');
       // 重置表单
       document.getElementById('feature-title').value = '';
@@ -74,6 +75,7 @@
     }
     async function saveFeatureFromModal() {
       if (!selectedFeature || !currentProject) return;
+      if (!requireWriteAccess('修改需求需要开发权限')) return;
       const featureId = selectedFeature.id;
       const name = document.getElementById('modal-task-title').value.trim();
       const description = document.getElementById('modal-task-desc').value;
@@ -98,6 +100,7 @@
     }
     async function confirmStartTask() {
       if (!selectedFeature || !currentProject) return;
+      if (!requireWriteAccess('启动开发任务需要开发权限')) return;
       const featureId = selectedFeature.id;
       const name = document.getElementById('modal-task-title').value.trim();
       const description = document.getElementById('modal-task-desc').value;
@@ -135,6 +138,7 @@
       }
     }
     async function parseWithAI() {
+      if (!requireWriteAccess('AI解析需求需要开发权限')) return;
       const input = document.getElementById('ai-feature-input').value.trim();
       if (!input) {
         showToast('请输入需求描述', 'error');
@@ -202,6 +206,7 @@
       });
     }
     async function submitFeature() {
+      if (!requireWriteAccess('提交需求需要开发权限')) return;
       const autoStart = document.getElementById('feature-auto-start').checked;
 
       if (currentInputMode === 'natural') {
@@ -297,6 +302,7 @@
       }
     }
     async function testAIConnection() {
+      if (!requireWriteAccess('测试 AI 配置需要开发权限')) return;
       const settings = {
         apiKey: document.getElementById('settings-api-key').value.trim(),
         baseUrl: document.getElementById('settings-base-url').value.trim() || 'https://api.stepfun.com/v1',
@@ -326,6 +332,7 @@
       }
     }
     function saveSettings() {
+      if (!requireWriteAccess('保存 AI 设置需要开发权限')) return;
       const settings = {
         apiKey: document.getElementById('settings-api-key').value.trim(),
         baseUrl: document.getElementById('settings-base-url').value.trim() || 'https://api.stepfun.com/v1',

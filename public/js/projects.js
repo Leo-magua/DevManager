@@ -202,6 +202,10 @@
     }
     async function updateProjectDefaultTool(toolType) {
       if (!currentProject) return;
+      if (!requireWriteAccess('修改默认执行工具需要开发权限')) {
+        renderProjectDefaultToolSelector(currentProjectDefaultTool || 'kimi');
+        return;
+      }
       try {
         const res = await fetch(`${API_BASE}/api/projects/${currentProject}/default-tool`, {
           method: 'PUT',

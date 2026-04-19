@@ -2,6 +2,7 @@
  * WebSocket 广播模块
  */
 const WebSocket = require('ws');
+const { isAuthenticated } = require('../auth');
 const { shellManager } = require('./shell-manager');
 
 // 客户端集合
@@ -37,9 +38,10 @@ shellManager.setBroadcastFn(broadcastTerminal);
 
 // 设置 WebSocket 服务器
 function setupWebSocket(wss, getTaskQueueStatus) {
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     clients.add(ws);
     ws.subscribedProject = null;
+    ws.isAuthenticated = isAuthenticated(req);
 
     console.log('[WebSocket] 客户端连接');
 
@@ -86,7 +88,7 @@ function setupWebSocket(wss, getTaskQueueStatus) {
           const { getAgentExecutor } = require('../core/agent-executor');
           const executor = getAgentExecutor();
           const hasTaskPty = executor && executor.processes[msg.project_id];
-          if (!hasTaskPty && !shellManager.has(msg.project_id)) {
+          if (!hasTaskPty && !shellManager.has(msg.project_id) && ws.isAuthenticated) {
             shellManager.start(msg.project_id);
           }
         }
@@ -101,6 +103,15 @@ function setupWebSocket(wss, getTaskQueueStatus) {
 
         // 向终端发送输入
         if (msg.type === 'terminal_input' && msg.project_id && msg.data) {
+          if (!ws.isAuthenticated) {
+            ws.send(JSON.stringify({
+              type: 'auth_required',
+              scope: 'write',
+              message: '终端写入需要先登录开发权限'
+            }));
+            return;
+          }
+
           const { getAgentExecutor } = require('../core/agent-executor');
           const executor = getAgentExecutor();
 

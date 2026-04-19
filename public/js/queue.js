@@ -1,5 +1,6 @@
     // 切换暂停状态
     async function togglePause() {
+      if (!requireWriteAccess('暂停或恢复队列需要开发权限')) return;
       try {
         const res = await fetch(`${API_BASE}/api/queue/pause/toggle`, {
           method: 'POST',
@@ -49,6 +50,7 @@
     }
     async function startNextQueuedTask() {
       if (!currentProject) return;
+      if (!requireWriteAccess('继续执行队列需要开发权限')) return;
       
       try {
         // 先检查当前项目状态
@@ -92,6 +94,7 @@
         showToast('请先选择一个项目', 'warning');
         return;
       }
+      if (!requireWriteAccess('停止任务需要开发权限')) return;
       
       if (!confirm('确定要停止当前项目的开发任务吗？\n\n⚠️ 这会终止正在运行的 Kimi Agent 进程')) {
         return;
@@ -119,6 +122,7 @@
     async function pauseTopTask(event) {
       event.stopPropagation();
       if (!currentProject) return;
+      if (!requireWriteAccess('暂停当前任务需要开发权限')) return;
 
       if (!confirm('确定要暂停当前任务吗？\n\n任务将保留在开发队列中，待你点击「继续」后自动恢复执行。')) return;
 
@@ -138,6 +142,7 @@
     async function deleteFeature(featureId, event) {
       event.stopPropagation();
       if (!currentProject) return;
+      if (!requireWriteAccess('删除任务需要开发权限')) return;
       
       if (!confirm('确定要删除这个任务吗？此操作不可恢复。')) return;
       

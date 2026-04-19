@@ -115,6 +115,10 @@
     "file_watcher": true,
     "multi_project": true
   },
+  "auth": {
+    "password": "devmanager-2026",
+    "session_ttl_hours": 24
+  },
   "scan_settings": {
     "auto_scan": false,
     "interval": 5,

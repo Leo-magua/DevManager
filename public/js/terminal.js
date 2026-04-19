@@ -7,6 +7,7 @@
       }
       
       term = new Terminal({
+        disableStdin: authState.enabled && !authState.authenticated,
         cursorBlink: true,
         convertEol: true,
         fontSize: 13,
@@ -103,6 +104,7 @@
       }
     }
     function sendCtrlC() {
+      if (!requireWriteAccess('发送终端控制信号需要开发权限')) return;
       if (currentProject && devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
         devmanSocket.send(JSON.stringify({
           type: 'terminal_input',
@@ -112,6 +114,7 @@
       }
     }
     function sendCtrlD() {
+      if (!requireWriteAccess('发送终端控制信号需要开发权限')) return;
       if (currentProject && devmanSocket && devmanSocket.readyState === WebSocket.OPEN) {
         devmanSocket.send(JSON.stringify({
           type: 'terminal_input',
@@ -125,6 +128,7 @@
         showToast('请先选择一个项目', 'warning');
         return;
       }
+      if (!requireWriteAccess('强制停止任务需要开发权限')) return;
       
       if (!confirm('确定要强制停止当前任务吗？\n\n这将：\n1. 发送中断信号到运行中的进程\n2. 重置任务状态为待处理\n3. 清理执行状态')) {
         return;
@@ -209,6 +213,7 @@
     // ========== 终端输入处理 ==========
     function handleTerminalInput(event) {
       if (event.key === 'Enter') {
+        if (!requireWriteAccess('终端输入需要开发权限')) return;
         const input = document.getElementById('terminal-input');
         const command = input.value.trim();
         

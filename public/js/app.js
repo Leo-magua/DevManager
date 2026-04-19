@@ -4,7 +4,8 @@
     let featureModalMode = 'start';
     let autoRefreshInterval = null;
     let currentProjectDefaultTool = 'kimi';
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
+      await refreshAuthStatus({ silent: true });
       loadProjects();
       connectWebSocket();
       

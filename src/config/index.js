@@ -10,14 +10,30 @@ const CONFIG_PATH = path.join(__dirname, '../..', 'config.json');
 let config = {
   app: { name: 'DevManager', port: 81 },
   projects_root: '/var/www/AllProject',
-  monitored_projects: []
+  monitored_projects: [],
+  auth: {
+    password: '',
+    session_ttl_hours: 24
+  }
 };
+
+function normalizeConfig(nextConfig = {}) {
+  const auth = nextConfig.auth || {};
+
+  return {
+    ...nextConfig,
+    auth: {
+      password: typeof auth.password === 'string' ? auth.password : '',
+      session_ttl_hours: Number(auth.session_ttl_hours) > 0 ? Number(auth.session_ttl_hours) : 24
+    }
+  };
+}
 
 // 加载配置
 async function loadConfig() {
   try {
     const data = await fs.readFile(CONFIG_PATH, 'utf-8');
-    config = JSON.parse(data);
+    config = normalizeConfig(JSON.parse(data));
     console.log('[配置] 已加载 config.json');
   } catch (err) {
     console.log('[配置] 使用默认配置');
@@ -31,7 +47,7 @@ function getConfig() {
 
 // 更新配置
 function setConfig(newConfig) {
-  config = { ...config, ...newConfig };
+  config = normalizeConfig({ ...config, ...newConfig });
 }
 
 // 保存配置到文件
