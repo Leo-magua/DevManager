@@ -86,6 +86,8 @@
         const toolBadge = isRunner && f.toolType
           ? (f.toolType === 'cursor'
               ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">Cursor</span>'
+              : f.toolType === 'codex'
+                ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Codex</span>'
               : '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">Kimi</span>')
           : '';
 
@@ -255,7 +257,7 @@
       await startDevelopment(featureId);
     }
     async function startDevelopment(featureId, options = {}) {
-      const { saveContent = false, name, description } = options;
+      const { saveContent = false, name, description, toolType } = options;
       
       if (saveContent) {
         try {
@@ -276,11 +278,14 @@
       }
       
       try {
-        const toolType = document.querySelector('input[name="modal_tool_type"]:checked')?.value || 'kimi';
+        const payload = {};
+        if (toolType !== undefined) {
+          payload.tool_type = toolType || null;
+        }
         const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tool_type: toolType })
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.success) {

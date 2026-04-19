@@ -19,6 +19,13 @@ const { getAIService } = require('../services/ai-service');
 const { broadcast } = require('../websocket/broadcast');
 const terminalBuffer = require('../websocket/terminal-buffer');
 
+const SUPPORTED_TOOL_TYPES = ['kimi', 'cursor', 'codex'];
+const DEFAULT_TOOL_TYPE = 'kimi';
+
+function normalizeToolType(toolType, fallback = DEFAULT_TOOL_TYPE) {
+  return SUPPORTED_TOOL_TYPES.includes(toolType) ? toolType : fallback;
+}
+
 // 扫描项目目录
 async function scanProjects() {
   const config = getConfig();
@@ -156,6 +163,7 @@ function createRoutes() {
       }
       
       if (idExists || pathExists) {
+        m.default_tool_type = normalizeToolType(m.default_tool_type, DEFAULT_TOOL_TYPE);
         seenIds.add(mIdLower);
         validMonitored.push(m);
       } else {
@@ -255,7 +263,13 @@ function createRoutes() {
     const deployServices = await deployServiceManager.getRunningServices(projectId);
 
     res.json({
-      project: { id: project.id, name: project.name, description: project.description, tech_stack: project.tech_stack },
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        tech_stack: project.tech_stack,
+        default_tool_type: normalizeToolType(project.default_tool_type, DEFAULT_TOOL_TYPE)
+      },
       feature_list: featureList,
       current_context: devState.current_context || {},
       changelog: devState.changelog || [],
@@ -838,7 +852,8 @@ function createRoutes() {
   router.post('/projects/:projectId/features/:featureId/start', async (req, res) => {
     const config = getConfig();
     const { projectId, featureId } = req.params;
-    const { tool_type = 'kimi' } = req.body || {};
+    const body = req.body || {};
+    const hasToolType = Object.prototype.hasOwnProperty.call(body, 'tool_type');
     
     try {
       const project = config.monitored_projects.find(p => p.id === projectId);
@@ -853,6 +868,18 @@ function createRoutes() {
       const feature = devState.feature_list?.find(f => f.id === featureId);
       if (!feature) {
         return res.status(404).json({ error: '功能项不存在' });
+      }
+
+      if (hasToolType) {
+        if (body.tool_type === null) {
+          delete feature.tool_type;
+        } else if (SUPPORTED_TOOL_TYPES.includes(body.tool_type)) {
+          feature.tool_type = body.tool_type;
+        } else {
+          return res.status(400).json({ error: '无效的执行工具', allowed: [...SUPPORTED_TOOL_TYPES, null] });
+        }
+        feature.updated_at = new Date().toISOString();
+        await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
       }
 
       const curSt = feature.status || 'Pending';
@@ -893,7 +920,9 @@ function createRoutes() {
         return res.status(400).json({ error: claimResult.error });
       }
 
-      claimResult.task.toolType = tool_type;
+      const resolvedToolType = feature.tool_type || normalizeToolType(project.default_tool_type, DEFAULT_TOOL_TYPE);
+      claimResult.task.toolType = resolvedToolType;
+      claimResult.task.tool_type = resolvedToolType;
       agentExecutor.executeTask(projectId, claimResult.task).catch((err) => {
         console.error('[API] features/start executeTask:', err);
       });
@@ -908,6 +937,32 @@ function createRoutes() {
     } catch (err) {
       res.status(500).json({ error: '启动任务失败', message: err.message });
     }
+  });
+
+  router.put('/projects/:projectId/default-tool', async (req, res) => {
+    const config = getConfig();
+    const { projectId } = req.params;
+    const { tool_type } = req.body || {};
+
+    if (!SUPPORTED_TOOL_TYPES.includes(tool_type)) {
+      return res.status(400).json({ error: '无效的默认执行工具', allowed: SUPPORTED_TOOL_TYPES });
+    }
+
+    const project = config.monitored_projects.find(p => p.id === projectId);
+    if (!project) {
+      return res.status(404).json({ error: '项目不存在' });
+    }
+
+    project.default_tool_type = tool_type;
+    await saveConfig();
+
+    res.json({
+      success: true,
+      project: {
+        id: project.id,
+        default_tool_type: project.default_tool_type
+      }
+    });
   });
 
   // 调整开发队列中任务顺序
@@ -972,10 +1027,10 @@ function createRoutes() {
   router.put('/projects/:projectId/features/:featureId/content', async (req, res) => {
     const config = getConfig();
     const { projectId, featureId } = req.params;
-    const { name, description, category } = req.body || {};
+    const { name, description, category, tool_type } = req.body || {};
 
-    if (name === undefined && description === undefined && category === undefined) {
-      return res.status(400).json({ error: '至少提供 name、description 或 category 之一' });
+    if (name === undefined && description === undefined && category === undefined && tool_type === undefined) {
+      return res.status(400).json({ error: '至少提供 name、description、category 或 tool_type 之一' });
     }
 
     try {
@@ -995,6 +1050,15 @@ function createRoutes() {
       if (typeof name === 'string') feature.name = name.trim() || feature.name;
       if (typeof description === 'string') feature.description = description;
       if (typeof category === 'string' && category.trim()) feature.category = category.trim();
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, 'tool_type')) {
+        if (tool_type === null) {
+          delete feature.tool_type;
+        } else if (SUPPORTED_TOOL_TYPES.includes(tool_type)) {
+          feature.tool_type = tool_type;
+        } else {
+          return res.status(400).json({ error: '无效的执行工具', allowed: [...SUPPORTED_TOOL_TYPES, null] });
+        }
+      }
       feature.updated_at = new Date().toISOString();
 
       await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));

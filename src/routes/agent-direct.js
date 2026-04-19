@@ -15,6 +15,13 @@ const { broadcast } = require('../websocket/broadcast');
 
 const router = express.Router();
 
+function resolveProjectToolType(project, toolType) {
+  const supported = ['kimi', 'cursor', 'codex'];
+  if (supported.includes(toolType)) return toolType;
+  if (supported.includes(project?.default_tool_type)) return project.default_tool_type;
+  return 'kimi';
+}
+
 /**
  * 创建需求并直接执行（闭环模式）
  * POST /api/agent/direct
@@ -34,6 +41,7 @@ router.post('/direct', async (req, res) => {
     name, 
     description, 
     category = 'Feature',
+    tool_type,
     auto_execute = true,
     record_only = false 
   } = req.body;
@@ -59,12 +67,14 @@ router.post('/direct', async (req, res) => {
     
     const now = new Date().toISOString();
     
+    const resolvedToolType = resolveProjectToolType(project, tool_type);
     const newFeature = {
       id: newId,
       name: name,
       description: description || '',
       status: record_only ? 'Pending' : 'Completed',  // 闭环直接标记完成
       category: category,
+      tool_type: resolvedToolType,
       source: 'backend',           // 来源标记
       auto_completed: !record_only, // 是否自动闭环
       created_at: now,
@@ -74,7 +84,7 @@ router.post('/direct', async (req, res) => {
     // 如果不是仅记录，添加执行信息
     if (!record_only) {
       newFeature.execution = {
-        agent: 'kimi',
+        agent: resolvedToolType,
         agent_id: req.headers['x-agent-id'] || 'system',
         started_at: now,
         completed_at: now,  // 即时完成
@@ -227,12 +237,14 @@ async function createDirectFeature(projectId, featureData) {
   const newId = await taskQueue.generateGlobalFeatureId();
   const now = new Date().toISOString();
 
+  const resolvedToolType = resolveProjectToolType(project, featureData.tool_type);
   const newFeature = {
     id: newId,
     name: featureData.name,
     description: featureData.description || '',
     status: featureData.record_only ? 'Pending' : 'Completed',
     category: featureData.category || 'Feature',
+    tool_type: resolvedToolType,
     source: 'backend',
     auto_completed: !featureData.record_only,
     created_at: now,
@@ -241,7 +253,7 @@ async function createDirectFeature(projectId, featureData) {
 
   if (!featureData.record_only) {
     newFeature.execution = {
-      agent: 'kimi',
+      agent: resolvedToolType,
       started_at: now,
       completed_at: now,
       result_summary: 'AI自动闭环执行'

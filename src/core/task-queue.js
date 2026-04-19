@@ -13,6 +13,7 @@ const { broadcast } = require('../websocket/broadcast');
 
 /** 开发队列中等待（顺序 = feature_list 中相对顺序） */
 const STATUS_QUEUED = 'Queued';
+const DEFAULT_TOOL_TYPE = 'kimi';
 
 class TaskQueue {
   constructor() {
@@ -124,6 +125,10 @@ class TaskQueue {
   }
 
   _toTaskInfo(projectId, f) {
+    const config = getConfig();
+    const project = config.monitored_projects.find(p => p.id === projectId);
+    const resolvedToolType = f.tool_type || f.toolType || project?.default_tool_type || DEFAULT_TOOL_TYPE;
+
     return {
       id: `TASK-${f.id}`,
       project_id: projectId,
@@ -131,7 +136,9 @@ class TaskQueue {
       feature_name: f.name,
       feature_desc: f.description || '',
       category: f.category || 'Feature',
-      created_at: f.created_at || new Date().toISOString()
+      created_at: f.created_at || new Date().toISOString(),
+      tool_type: resolvedToolType,
+      toolType: resolvedToolType
     };
   }
 

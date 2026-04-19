@@ -177,6 +177,8 @@
       document.getElementById('project-name').textContent = data.project.name;
       document.getElementById('project-desc').textContent = data.project.description || '暂无描述';
       document.getElementById('project-tech').textContent = (data.project.tech_stack || []).join(' · ') || '';
+      currentProjectDefaultTool = data.project.default_tool_type || 'kimi';
+      renderProjectDefaultToolSelector(currentProjectDefaultTool);
 
       // 获取执行中的任务
       const live = data.queue && data.queue.executing;
@@ -188,6 +190,44 @@
       // 日志
       renderChangelog(data.changelog || []);
     }
+    function renderProjectDefaultToolSelector(toolType) {
+      document.querySelectorAll('input[name="project_default_tool_type"]').forEach(input => {
+        input.checked = input.value === toolType;
+      });
+      const hint = document.getElementById('project-default-tool-hint');
+      if (hint) {
+        const label = toolType.charAt(0).toUpperCase() + toolType.slice(1);
+        hint.textContent = `未指定需求卡片工具时，任务会使用 ${label} 执行。`;
+      }
+    }
+    async function updateProjectDefaultTool(toolType) {
+      if (!currentProject) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/projects/${currentProject}/default-tool`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool_type: toolType })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(data?.error || `请求失败 (${res.status})`);
+        }
+        if (!data.success) {
+          throw new Error(data.error || '保存失败');
+        }
+        currentProjectDefaultTool = data.project.default_tool_type || toolType;
+        renderProjectDefaultToolSelector(currentProjectDefaultTool);
+        showToast(`默认执行工具已切换为 ${currentProjectDefaultTool}`, 'success');
+      } catch (err) {
+        renderProjectDefaultToolSelector(currentProjectDefaultTool || 'kimi');
+        showToast('默认执行工具保存失败: ' + err.message, 'error');
+      }
+    }
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.name === 'project_default_tool_type') {
+        updateProjectDefaultTool(e.target.value);
+      }
+    });
     function renderChangelog(logs) {
       const container = document.getElementById('changelog-list');
       container.innerHTML = '';

@@ -52,9 +52,18 @@
         btnStart.classList.add('hidden');
         btnSave.classList.remove('hidden');
       }
-      // 重置工具选择为默认 kimi
-      const kimiRadio = document.querySelector('input[name="modal_tool_type"][value="kimi"]');
-      if (kimiRadio) kimiRadio.checked = true;
+      const featureToolType = feature.tool_type || feature.toolType || '';
+      const defaultBadge = document.getElementById('modal-default-tool-badge');
+      if (defaultBadge) {
+        defaultBadge.textContent = `默认 ${currentProjectDefaultTool.charAt(0).toUpperCase() + currentProjectDefaultTool.slice(1)}`;
+      }
+      document.querySelectorAll('input[name="modal_tool_type"]').forEach(input => {
+        input.checked = input.value === featureToolType;
+      });
+      if (!document.querySelector('input[name="modal_tool_type"]:checked')) {
+        const defaultRadio = document.querySelector('input[name="modal_tool_type"][value=""]');
+        if (defaultRadio) defaultRadio.checked = true;
+      }
       document.getElementById('start-modal').classList.remove('hidden');
     }
     function closeModal() {
@@ -68,11 +77,12 @@
       const featureId = selectedFeature.id;
       const name = document.getElementById('modal-task-title').value.trim();
       const description = document.getElementById('modal-task-desc').value;
+      const toolType = document.querySelector('input[name="modal_tool_type"]:checked')?.value ?? '';
       try {
         const res = await fetch(`${API_BASE}/api/projects/${currentProject}/features/${featureId}/content`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description })
+          body: JSON.stringify({ name, description, tool_type: toolType || null })
         });
         const data = await res.json();
         if (data.success) {
@@ -91,8 +101,9 @@
       const featureId = selectedFeature.id;
       const name = document.getElementById('modal-task-title').value.trim();
       const description = document.getElementById('modal-task-desc').value;
+      const selectedTool = document.querySelector('input[name="modal_tool_type"]:checked')?.value ?? '';
       closeModal();
-      await startDevelopment(featureId, { saveContent: true, name, description });
+      await startDevelopment(featureId, { saveContent: true, name, description, toolType: selectedTool });
     }
     function switchInputMode(mode) {
       currentInputMode = mode;

@@ -3,7 +3,7 @@
  * 
  * 功能：
  * 1. 每5分钟检查一次执行中的任务
- * 2. 检测是否有kimi进程在运行
+ * 2. 检测当前任务对应的 Agent 进程是否在运行
  * 3. 检查任务是否超时（25分钟）
  * 4. 如果检测到任务已完成但状态未更新，自动修复
  */
@@ -94,8 +94,8 @@ class TaskMonitor {
       
       console.log('[TaskMonitor] 检查项目 ' + projectId + ': 任务 ' + executing.id + ' (' + executing.feature_name + ')');
       
-      // 1. 检查是否有kimi进程在运行
-      const hasKimiProcess = await this.checkKimiProcess(projectId);
+      // 1. 检查当前任务对应的 Agent 进程是否在运行
+      const hasAgentProcess = await this.checkAgentProcess(projectId, executing);
       
       // 2. 检查任务是否超时
       const isTimeout = this.checkTimeout(projectId);
@@ -104,11 +104,11 @@ class TaskMonitor {
       const processInfo = agentExecutor.processes[projectId];
       const processExists = processInfo && !processInfo.killed;
       
-      console.log('[TaskMonitor] ' + projectId + ' 状态: kimi进程=' + hasKimiProcess + ', 进程对象=' + processExists + ', 超时=' + isTimeout);
+      console.log('[TaskMonitor] ' + projectId + ' 状态: agent进程=' + hasAgentProcess + ', 进程对象=' + processExists + ', 超时=' + isTimeout);
       
       // 情况1: kimi进程不存在，但任务状态还是执行中 -> 任务可能已完成但未更新状态
-      if (!hasKimiProcess && !processExists) {
-        console.log('[TaskMonitor] ⚠️ ' + projectId + ': 检测到kimi进程已结束但任务状态仍为执行中，尝试检测输出...');
+      if (!hasAgentProcess && !processExists) {
+        console.log('[TaskMonitor] ⚠️ ' + projectId + ': 检测到 Agent 进程已结束但任务状态仍为执行中，尝试检测输出...');
         await this.handleProcessEndedButTaskRunning(projectId, executing, agentExecutor);
         continue;
       }
@@ -121,7 +121,7 @@ class TaskMonitor {
       }
       
       // 情况3: 进程正常，记录检查通过
-      if (hasKimiProcess) {
+      if (hasAgentProcess) {
         console.log('[TaskMonitor] ✓ ' + projectId + ': 任务执行正常');
       }
     }
@@ -129,23 +129,25 @@ class TaskMonitor {
     console.log('[TaskMonitor] ====== AI兜底监测检查完成 ======');
   }
 
-  // 检查是否有kimi进程在运行
-  async checkKimiProcess(projectId) {
+  // 检查当前任务对应的 Agent 进程是否在运行
+  async checkAgentProcess(projectId, executingTask = null) {
     try {
-      // 检查是否有kimi进程
-      const { stdout } = await execAsync('pgrep -f "kimi.*-p.*prompt-TASK" || echo "none"');
-      const hasKimi = stdout.trim() !== 'none' && stdout.trim() !== '';
-      
-      if (hasKimi) {
-        // 进一步检查是否是当前项目的任务
-        const executing = getTaskQueue().getExecutingTask(projectId);
-        if (executing) {
-          const { stdout: detailStdout } = await execAsync('ps aux | grep -i "kimi.*' + executing.id + '" | grep -v grep || echo "none"');
-          return detailStdout.trim() !== 'none' && detailStdout.trim() !== '';
-        }
+      const executing = executingTask || getTaskQueue().getExecutingTask(projectId);
+      const toolType = executing?.tool_type || executing?.toolType || 'kimi';
+      const taskId = executing?.id || '';
+
+      if (toolType === 'codex') {
+        const { stdout } = await execAsync(`ps aux | grep -i "codex" | grep -F "${taskId}" | grep -v grep || echo "none"`);
+        return stdout.trim() !== 'none' && stdout.trim() !== '';
       }
-      
-      return hasKimi;
+
+      if (toolType === 'cursor') {
+        const { stdout } = await execAsync(`ps aux | grep -i "cursor-run" | grep -F "${taskId}" | grep -v grep || echo "none"`);
+        return stdout.trim() !== 'none' && stdout.trim() !== '';
+      }
+
+      const { stdout } = await execAsync(`ps aux | grep -i "kimi" | grep -F "${taskId}" | grep -v grep || echo "none"`);
+      return stdout.trim() !== 'none' && stdout.trim() !== '';
     } catch (err) {
       return false;
     }

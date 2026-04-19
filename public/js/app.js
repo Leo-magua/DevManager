@@ -3,6 +3,7 @@
     let selectedFeature = null;
     let featureModalMode = 'start';
     let autoRefreshInterval = null;
+    let currentProjectDefaultTool = 'kimi';
     document.addEventListener('DOMContentLoaded', () => {
       loadProjects();
       connectWebSocket();

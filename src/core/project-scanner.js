@@ -205,6 +205,7 @@ class ProjectScanner {
       name: projectName,
       path: projectPath,
       description: `自动发现的项目: ${projectName}`,
+      default_tool_type: 'kimi',
       tech_stack: techStack,
       key_files: {
         dev_state: 'dev_state.json',
