@@ -1,5 +1,7 @@
 node_modules/
 .trash/
+.codex
+backups/
 *.log
 data/executor.log
 data/prompt-*.txt
@@ -11,3 +13,4 @@ backups/*.bak-corrupt
 *.pid
 nohup.out
 *.bak
+*.bak*
