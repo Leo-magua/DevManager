@@ -45,7 +45,7 @@
         "requirements": "FEATURE_LIST.md"
       },
       "active": true,
-      "default_tool_type": "kimi"
+      "default_tool_type": "codex"
     },
     {
       "id": "larkmessagebox",

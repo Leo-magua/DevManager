@@ -37,6 +37,11 @@
     ::-webkit-scrollbar-thumb:hover { background: #444444; }
     .glass { background: rgba(17, 17, 17, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(51, 51, 51, 0.5); }
     .status-dot { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.7); animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+    .nav-chip { background: rgba(17, 17, 17, 0.92); border: 1px solid rgba(51, 51, 51, 0.8); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+    .nav-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: 0.9rem; border: 1px solid rgba(51, 51, 51, 0.9); background: rgba(17, 17, 17, 0.96); color: #d1d5db; transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease, color 160ms ease; }
+    .nav-icon-btn:hover { transform: translateY(-1px); border-color: rgba(0, 212, 255, 0.45); background: rgba(26, 26, 26, 0.98); color: #ffffff; }
+    .nav-icon-btn--warm { border-color: rgba(245, 158, 11, 0.28); background: rgba(245, 158, 11, 0.08); color: #fcd34d; }
+    .nav-icon-btn--warm:hover { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.16); color: #fde68a; }
     @keyframes pulse-ring { 0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0, 212, 255, 0); } 100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(0, 212, 255, 0); } }
   </style>
 </head>
@@ -44,7 +49,7 @@
   <!-- 顶部导航 -->
   <nav class="fixed top-0 left-0 right-0 z-50 glass border-b border-dark-600">
     <div class="max-w-7xl mx-auto px-6">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex h-16 items-center justify-between gap-4">
         <div class="flex items-center gap-4">
           <div class="w-10 h-10 bg-accent rounded-xl flex items-center justify-center">
             <svg class="w-6 h-6 text-dark-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
@@ -54,34 +59,41 @@
             <p class="text-xs text-gray-500">智能开发指挥中心</p>
           </div>
         </div>
-        <div class="flex items-center gap-4">
-          <div class="hidden sm:flex flex-col items-end leading-tight">
-            <span id="auth-status-badge" class="px-2 py-1 text-xs rounded-full border border-dark-500 bg-dark-800 text-gray-300">检查中</span>
-            <span id="auth-status-text" class="text-[11px] text-gray-500 mt-1">正在检查权限</span>
+        <!-- 右侧模块：简约单排风格 -->
+        <div class="flex min-w-0 items-center gap-3">
+          <div class="hidden sm:flex items-center gap-2">
+            <span id="auth-status-badge" class="text-[11px] text-gray-400 font-medium">检查中</span>
+            <span id="auth-status-text" class="sr-only">正在检查权限</span>
           </div>
-          <button id="auth-login-btn" onclick="openAuthModal()" class="hidden flex items-center gap-2 px-3 py-2 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 text-amber-300 text-sm rounded-lg transition-colors">
-            <span>输入开发密码</span>
+          <button id="auth-login-btn" onclick="openAuthModal()" class="hidden text-gray-500 hover:text-amber-300 transition-colors" title="输入开发密码" aria-label="输入开发密码">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 11V8a3 3 0 10-6 0v3m-2 0h10a2 2 0 012 2v5a2 2 0 01-2 2H7a2 2 0 01-2-2v-5a2 2 0 012-2z"></path>
+            </svg>
           </button>
-          <button id="auth-logout-btn" onclick="logoutAuth()" class="hidden flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-600 hover:border-red-500/40 text-white text-sm rounded-lg transition-colors">
-            <span>退出权限</span>
+          <button id="auth-logout-btn" onclick="logoutAuth()" class="hidden text-gray-500 hover:text-red-300 transition-colors" title="退出" aria-label="退出">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 16l4-4m0 0l-4-4m4 4H9"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 20H6a2 2 0 01-2-2V6a2 2 0 012-2h7"></path>
+            </svg>
           </button>
-          <button id="project-selector-btn" onclick="openDeployModal()" class="flex items-center gap-2 px-4 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors min-w-[140px]">
-            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-            <span id="current-project-name">选择项目...</span>
+          <button id="project-selector-btn" onclick="openDeployModal()" class="group flex items-center gap-1.5 text-sm text-gray-200 transition-colors hover:text-white translate-y-[1px]">
+            <svg class="w-4 h-4 text-gray-500 group-hover:text-gray-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+            <span id="current-project-name" class="max-w-[160px] truncate font-medium">选择项目...</span>
+            <svg class="h-3 w-3 text-gray-600 group-hover:text-gray-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 9l-7 7-7-7"></path>
+            </svg>
           </button>
-          <button onclick="openScanModal()" class="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors" title="扫描项目目录">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          <button onclick="openScanModal()" class="text-gray-600 hover:text-gray-300 transition-colors -translate-y-[1px]" title="扫描项目目录" aria-label="扫描项目目录">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
           </button>
-
-          <button onclick="openSettingsModal()" class="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-600 hover:border-accent text-white text-sm rounded-lg transition-colors" title="API设置">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-            <span class="hidden sm:inline">设置</span>
+          <button onclick="openSettingsModal()" class="text-gray-600 hover:text-gray-300 transition-colors translate-y-[1px]" title="API设置" aria-label="API设置">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
           </button>
-          <div class="flex items-center gap-2 text-sm text-gray-500">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 status-dot"></span>
+          <div class="hidden md:flex items-center gap-1.5 text-[10px] text-gray-600 -translate-y-[1px]">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 status-dot"></span>
             <span id="connection-status">已连接</span>
+            <span id="last-update">--:--:--</span>
           </div>
-          <div class="text-xs text-gray-600" id="last-update">--:--:--</div>
         </div>
       </div>
     </div>

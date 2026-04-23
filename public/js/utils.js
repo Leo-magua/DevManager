@@ -29,10 +29,10 @@
       const dot = el.previousElementSibling;
       if (ok) {
         el.textContent = '已连接';
-        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 status-dot';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 status-dot';
       } else {
         el.textContent = '断开';
-        dot.className = 'w-2 h-2 rounded-full bg-red-400';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-red-400';
       }
     }
     let authState = {
@@ -93,8 +93,8 @@
 
       if (!authState.enabled) {
         badge.textContent = '未配置';
-        badge.className = 'px-2 py-1 text-xs rounded-full border border-amber-500/30 bg-amber-500/15 text-amber-300';
-        summary.textContent = '开发密码未配置';
+        badge.className = 'text-[11px] text-amber-400/90 font-medium';
+        summary.textContent = '未启用';
         readonly.classList.remove('hidden');
         readonly.textContent = '当前未配置开发密码，写操作会被后端拒绝。';
         loginBtn.classList.add('hidden');
@@ -108,8 +108,8 @@
 
       if (authState.authenticated) {
         badge.textContent = '已授权';
-        badge.className = 'px-2 py-1 text-xs rounded-full border border-emerald-500/30 bg-emerald-500/15 text-emerald-300';
-        summary.textContent = `开发权限已启用，会话约 ${authState.session_ttl_hours} 小时`;
+        badge.className = 'text-[11px] text-emerald-400/90 font-medium';
+        summary.textContent = '可写';
         readonly.classList.add('hidden');
         loginBtn.classList.add('hidden');
         logoutBtn.classList.remove('hidden');
@@ -119,8 +119,8 @@
         }
       } else {
         badge.textContent = '只读';
-        badge.className = 'px-2 py-1 text-xs rounded-full border border-dark-500 bg-dark-800 text-gray-300';
-        summary.textContent = '当前为只读访问';
+        badge.className = 'text-[11px] text-gray-400 font-medium';
+        summary.textContent = '只读';
         readonly.classList.remove('hidden');
         readonly.textContent = '你可以查看项目状态，但新增需求、启动开发、终端输入、部署和配置修改都需要先登录。';
         loginBtn.classList.remove('hidden');
