@@ -6,7 +6,7 @@ echo "  服务状态"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-NODE_BIN="/Users/wendy/.local/bin/node"
+NODE_BIN="${NODE_BIN:-$HOME/.local/bin/node}"
 PERSONALWORK_PORT="${PERSONALWORK_PORT:-3991}"
 
 check_port() {

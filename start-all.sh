@@ -3,8 +3,9 @@
 
 cd "$(dirname "$0")"
 
-NODE_BIN="/Users/wendy/.local/bin/node"
-PERSONALWORK_DIR="/Users/wendy/AllProject/PersonalWork"
+NODE_BIN="${NODE_BIN:-$HOME/.local/bin/node}"
+PROJECTS_ROOT="${PROJECTS_ROOT:-$HOME/AllProject}"
+PERSONALWORK_DIR="${PERSONALWORK_DIR:-$PROJECTS_ROOT/PersonalWork}"
 PERSONALWORK_PORT="${PERSONALWORK_PORT:-3991}"
 
 is_port_listening() {
@@ -30,7 +31,7 @@ fi
 
 # 检查 80 端口反向代理：保留现有代理，不自动回退 8888
 echo "🔎 检查 80 端口反向代理..."
-cd /Users/wendy/AllProject/DevManager
+cd "$PROJECTS_ROOT/DevManager"
 if lsof -i :80 2>/dev/null | grep -q LISTEN; then
   echo "✅ 80 端口已有代理在运行，保留现有代理"
 else

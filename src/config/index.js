@@ -3,14 +3,16 @@
  */
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 const bcrypt = require('bcryptjs');
 
 const CONFIG_PATH = path.join(__dirname, '../..', 'config.json');
+const DEFAULT_PROJECTS_ROOT = process.env.PROJECTS_ROOT || path.join(os.homedir(), 'AllProject');
 
 // 默认配置
 let config = {
   app: { name: 'DevManager', port: 81 },
-  projects_root: '/Users/wendy/AllProject',
+  projects_root: DEFAULT_PROJECTS_ROOT,
   monitored_projects: [],
   auth: {
     password: '',

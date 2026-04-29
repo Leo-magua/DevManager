@@ -4,6 +4,7 @@
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
+const os = require('os');
 const { spawn } = require('child_process');
 const pty = require('node-pty');
 const { getConfig } = require('../config');
@@ -323,7 +324,7 @@ class AgentExecutor {
   buildCursorCommand(promptFile, projectPath) {
     const escapedPromptFile = promptFile.replace(/"/g, '\\"');
     const escapedProjectPath = projectPath.replace(/"/g, '\\"');
-    const homeDir = process.env.HOME || '/Users/wendy';
+    const homeDir = process.env.HOME || os.homedir();
     const cursorAgentBin = process.env.CURSOR_AGENT_BIN || path.join(homeDir, '.local/bin/cursor-agent');
     const defaultCursorModel = process.env.CURSOR_MODEL_DEFAULT || 'composer-2';
 

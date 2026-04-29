@@ -10,6 +10,7 @@ const cors = require('cors');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const WebSocket = require('ws');
 
 // 加载配置
@@ -45,7 +46,7 @@ app.use('/api', createRoutes());
 
 function startPersonalWorkStaticServer(config) {
   const port = parseInt(process.env.PERSONALWORK_PORT || '3991', 10);
-  const projectsRoot = config.projects_root || '/Users/wendy/AllProject';
+  const projectsRoot = config.projects_root || process.env.PROJECTS_ROOT || path.join(os.homedir(), 'AllProject');
   const distDir = process.env.PERSONALWORK_DIST || path.join(projectsRoot, 'PersonalWork', 'dist');
   const indexPath = path.join(distDir, 'index.html');
 

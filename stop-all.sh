@@ -3,7 +3,7 @@
 
 echo "🛑 停止所有服务..."
 
-NODE_BIN="/Users/wendy/.local/bin/node"
+NODE_BIN="${NODE_BIN:-$HOME/.local/bin/node}"
 PERSONALWORK_PORT="${PERSONALWORK_PORT:-3991}"
 
 stop_port() {

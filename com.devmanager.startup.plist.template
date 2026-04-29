@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for launchd plist. Substitute placeholders before installing:
+
+      ./scripts/install-launchd.sh
+
+  or manually:
+
+      sed -e "s|@HOME@|$HOME|g" -e "s|@DEVMANAGER_DIR@|$HOME/AllProject/DevManager|g" \
+          com.devmanager.startup.plist.template \
+          > ~/Library/LaunchAgents/com.devmanager.startup.plist
+
+  Placeholders:
+    @HOME@            - Absolute path to user's home directory
+    @DEVMANAGER_DIR@  - Absolute path to the DevManager checkout
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.devmanager.startup</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>@DEVMANAGER_DIR@/start-all.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>WorkingDirectory</key>
+    <string>@DEVMANAGER_DIR@</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:@HOME@/.local/bin</string>
+        <key>HOME</key>
+        <string>@HOME@</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>@DEVMANAGER_DIR@/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>@DEVMANAGER_DIR@/launchd-error.log</string>
+</dict>
+</plist>

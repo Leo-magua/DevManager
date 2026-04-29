@@ -17,10 +17,11 @@ const { getConfig, saveConfig } = require('../config');
 const { broadcast } = require('../websocket/broadcast');
 
 // Nginx 配置文件路径 (macOS Homebrew)
-const NGINX_CONFIG_DIR = '/opt/homebrew/etc/nginx/servers';
-const NGINX_MAIN_CONFIG = '/opt/homebrew/etc/nginx/nginx.conf';
+const NGINX_PREFIX = process.env.NGINX_PREFIX || process.env.HOMEBREW_PREFIX || '/opt/homebrew';
+const NGINX_CONFIG_DIR = process.env.NGINX_CONFIG_DIR || `${NGINX_PREFIX}/etc/nginx/servers`;
+const NGINX_MAIN_CONFIG = process.env.NGINX_MAIN_CONFIG || `${NGINX_PREFIX}/etc/nginx/nginx.conf`;
 const DEVMANAGER_NGINX_CONFIG = path.join(NGINX_CONFIG_DIR, 'devmanager-projects.conf');
-const NGINX_BIN = '/opt/homebrew/bin/nginx';
+const NGINX_BIN = process.env.NGINX_BIN || `${NGINX_PREFIX}/bin/nginx`;
 const PERSONALWORK_PORT = parseInt(process.env.PERSONALWORK_PORT || '3991', 10);
 
 // 项目部署配置模板
