@@ -22,8 +22,14 @@ function getAuthConfig() {
 }
 
 function getConfiguredPassword() {
+  // Prefer environment variables so the credential is never tracked in git.
+  // ADMIN_PASSWORD_HASH / DEVMANAGER_PASSWORD_HASH expect a bcrypt hash.
+  // DEVMANAGER_PASSWORD is the legacy plain-text fallback.
+  const envHash = process.env.ADMIN_PASSWORD_HASH || process.env.DEVMANAGER_PASSWORD_HASH;
+  if (envHash) return envHash;
+  if (process.env.DEVMANAGER_PASSWORD) return process.env.DEVMANAGER_PASSWORD;
   const config = getConfig();
-  return process.env.DEVMANAGER_PASSWORD || config.auth?.password || '';
+  return config.auth?.password || '';
 }
 
 /**

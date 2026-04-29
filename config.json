@@ -147,7 +147,7 @@
     "multi_project": true
   },
   "auth": {
-    "password": "$2b$10$cY4KmMXdZxEzmpxgVkgz5uHoQvmcYouHkqzSNcTTUzC3A8g4VxgRm",
+    "password": "",
     "session_ttl_hours": 24
   },
   "scan_settings": {
