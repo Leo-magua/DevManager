@@ -70,7 +70,11 @@ function resolveFile(rootDir, fallbackFile, url) {
   const relativePath = pathname === '/' ? fallbackFile : pathname.replace(/^\/+/, '');
   const candidate = path.resolve(rootDir, relativePath);
 
-  if (candidate.startsWith(rootDir) && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+  // Strict containment: candidate must equal rootDir or be a descendant
+  // (prefix check terminated by path.sep so /var/wwwroot can't match /var/www).
+  const withinRoot = candidate === rootDir || candidate.startsWith(rootDir + path.sep);
+
+  if (withinRoot && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
     return candidate;
   }
 
