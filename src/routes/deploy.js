@@ -87,7 +87,19 @@ function createDeployRoutes() {
 
   router.post('/:projectId/start', async (req, res) => {
     const { projectId } = req.params;
-    const { port: customPort } = req.body || {};
+    const { port: rawCustomPort } = req.body || {};
+
+    // Validate customPort: must be an integer in [1024, 65535]. This mirrors the
+    // /update-port validation and is the ONLY user-controlled value that flows
+    // into the shell command produced by nginxManager.generateStartCommand.
+    let customPort = null;
+    if (rawCustomPort !== undefined && rawCustomPort !== null && rawCustomPort !== '') {
+      const n = Number(rawCustomPort);
+      if (!Number.isInteger(n) || n < 1024 || n > 65535) {
+        return res.status(400).json({ error: '无效的端口号 (1024-65535)' });
+      }
+      customPort = n;
+    }
 
     const config = getConfig();
     const project = config.monitored_projects.find(p => p.id === projectId);
@@ -126,12 +138,16 @@ function createDeployRoutes() {
       const logFd = fsSync.openSync(logPath, 'a');
       fsSync.writeSync(logFd, `\n[${new Date().toISOString()}] ${startCmd.command}\n[cwd] ${startCmd.cwd}\n`);
 
-      const child = spawn(startCmd.command, {
+      // The start command is a shell pipeline produced from server-controlled
+      // template strings + the integer-validated port above. We invoke it via
+      // an explicit /bin/sh -c with shell:false rather than spawn's implicit
+      // shell:true so the boundary is visible and the argv is well-formed.
+      const child = spawn('/bin/sh', ['-c', startCmd.command], {
         cwd: startCmd.cwd,
         env: { ...process.env, ...startCmd.env },
         detached: true,
         stdio: ['ignore', logFd, logFd],
-        shell: true
+        shell: false
       });
 
       child.unref();
