@@ -9,6 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
 const WebSocket = require('ws');
 
 // 加载配置
@@ -41,6 +42,36 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // 挂载 API 路由
 app.use('/api', createRoutes());
+
+function startPersonalWorkStaticServer(config) {
+  const port = parseInt(process.env.PERSONALWORK_PORT || '3991', 10);
+  const projectsRoot = config.projects_root || '/Users/wendy/AllProject';
+  const distDir = process.env.PERSONALWORK_DIST || path.join(projectsRoot, 'PersonalWork', 'dist');
+  const indexPath = path.join(distDir, 'index.html');
+
+  if (!fs.existsSync(indexPath)) {
+    console.warn(`[PersonalWork] 静态产物不存在，跳过 3991 服务: ${indexPath}`);
+    return;
+  }
+
+  const personalApp = express();
+  personalApp.use(express.static(distDir));
+  personalApp.get('*', (req, res) => {
+    res.sendFile(indexPath);
+  });
+
+  const personalServer = personalApp.listen(port, '0.0.0.0', () => {
+    console.log(`[PersonalWork] 静态服务已启动: http://localhost:${port} -> ${distDir}`);
+  });
+
+  personalServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[PersonalWork] 端口 ${port} 已被占用，跳过静态服务启动`);
+      return;
+    }
+    console.error('[PersonalWork] 静态服务启动失败:', err.message);
+  });
+}
 
 // 启动函数
 async function startup() {
@@ -92,6 +123,9 @@ async function startup() {
     console.log('    POST /api/nginx/apply           - 应用配置（生成+重载）');
     console.log('    GET  /api/nginx/start-command/:projectId - 获取启动命令');
     console.log('='.repeat(70));
+
+    // PersonalWork 是 80 端口默认入口的上游，跟随 DevManager 常驻更稳定。
+    startPersonalWorkStaticServer(config);
     
     // 5. 启动时同步状态
     await stateSync.syncOnStartup();

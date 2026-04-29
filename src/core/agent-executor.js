@@ -323,11 +323,12 @@ class AgentExecutor {
   buildCursorCommand(promptFile, projectPath) {
     const escapedPromptFile = promptFile.replace(/"/g, '\\"');
     const escapedProjectPath = projectPath.replace(/"/g, '\\"');
-    const cursorAgentBin = process.env.CURSOR_AGENT_BIN || '/root/.local/bin/cursor-agent';
+    const homeDir = process.env.HOME || '/Users/wendy';
+    const cursorAgentBin = process.env.CURSOR_AGENT_BIN || path.join(homeDir, '.local/bin/cursor-agent');
     const defaultCursorModel = process.env.CURSOR_MODEL_DEFAULT || 'composer-2';
 
     return `
-source /root/.cursor-openrouter.env 2>/dev/null || true
+source "${homeDir}/.cursor-openrouter.env" 2>/dev/null || true
 PROMPT_CONTENT=$(cat "${escapedPromptFile}")
 MODEL="${defaultCursorModel}"
 if [ -n "$MODEL" ]; then
@@ -349,18 +350,29 @@ else
 fi`.trim();
   }
 
-  async runKimiAgent(projectId, prompt, projectPath, task) {
+  /**
+   * 通用 Agent 执行器
+   * 封装 PTY 创建、输出缓冲、成功/失败检测、超时处理、退出清理等公共逻辑
+   */
+  _runAgent(projectId, task, prompt, promptFile, shell, shellArgs, options) {
+    const {
+      label = '',
+      successPatterns,
+      failurePatterns = [],
+      checkFailure = false,
+      extraEnv = {},
+      timeoutMs = 25 * 60 * 1000,
+      projectPath
+    } = options;
+
     return new Promise((resolve) => {
       const startTime = Date.now();
       let outputBuffer = '';
       let taskCompletedDetected = false;
-      
-      const promptFile = path.join(__dirname, '../..', 'data', `prompt-${task.id}.txt`);
+      let taskFailedDetected = false;
+
+      fs.mkdirSync(path.dirname(promptFile), { recursive: true });
       fs.writeFileSync(promptFile, prompt);
-      
-      const kimiCmd = process.env.KIMI_CMD || 'kimi';
-      const shell = process.env.SHELL || 'bash';
-      const shellArgs = shell.includes('bash') ? ['-lc', `${kimiCmd} -y --no-thinking -p "${promptFile}"`] : ['-c', `${kimiCmd} -y --no-thinking -p "${promptFile}"`];
 
       const ptyProcess = pty.spawn(shell, shellArgs, {
         name: 'xterm-256color',
@@ -371,66 +383,62 @@ fi`.trim();
           ...process.env,
           TERM: 'xterm-256color',
           FORCE_COLOR: '1',
-          KIMI_TIMEOUT: '1800'
+          ...extraEnv
         }
       });
-      
+
       this.processes[projectId] = ptyProcess;
-      // 暂停持久 shell 输出，避免与任务输出混淆
       shellManager.pause(projectId);
-      
       terminalBuffer.init(projectId, task.id);
-      
-      // 任务完成检测关键词
-      const successPatterns = [
-        /修改完成|修改已成功|已成功修改/i,
-        /任务已完成|任务完成|开发完成/i,
-        /已完成.*移除|已成功.*删除/i,
-        /总结.*修改|修改总结/i,
-        /功能已实现|已实现.*功能/i,
-        /代码已提交|已提交.*代码/i,
-        /To resume this session/i
-      ];
-      
+
+      const labelTag = label ? ` (${label})` : '';
+
       ptyProcess.onData(async (data) => {
         terminalBuffer.append(projectId, data);
         broadcastTerminal(projectId, data);
-        
-        // 记录到本地日志文件
         fs.appendFileSync(EXECUTOR_LOG_PATH, data);
-        
-        // 收集输出用于检测任务完成
+
         outputBuffer += data;
-        // 保持缓冲区大小合理（保留最后 10KB）
         if (outputBuffer.length > 10240) {
           outputBuffer = outputBuffer.slice(-10240);
         }
-        
-        // 检测任务是否已完成
-        if (!taskCompletedDetected) {
+
+        if (checkFailure && !taskFailedDetected) {
+          for (const pattern of failurePatterns) {
+            if (pattern.test(outputBuffer)) {
+              taskFailedDetected = true;
+              console.log(`[AgentExecutor] ${projectId}${labelTag} 检测到任务失败标记`);
+              break;
+            }
+          }
+        }
+
+        const blockedByFailure = checkFailure && taskFailedDetected;
+        if (!taskCompletedDetected && !blockedByFailure) {
           for (const pattern of successPatterns) {
             if (pattern.test(outputBuffer)) {
               taskCompletedDetected = true;
-              console.log(`[AgentExecutor] ${projectId} 检测到任务完成标记`);
+              console.log(`[AgentExecutor] ${projectId}${labelTag} 检测到任务完成标记`);
               break;
             }
           }
         }
       });
-      
+
       ptyProcess.onExit(async ({ exitCode }) => {
         try { fs.unlinkSync(promptFile); } catch {}
-        
+
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        
-        // 根据退出码/完成标记写入终端状态消息（切换项目后仍可回看历史）
-        const isSuccess = exitCode === 0 || taskCompletedDetected;
+        const isSuccess = checkFailure
+          ? !taskFailedDetected && (exitCode === 0 || taskCompletedDetected)
+          : exitCode === 0 || taskCompletedDetected;
         const exitIcon = isSuccess ? '\u2713' : '\u2717';
         const exitColor = isSuccess ? '\x1b[32m' : '\x1b[31m';
-        const exitMsg = `\r\n${exitColor}[${exitIcon} 任务${isSuccess ? '完成' : '结束'} | 退出码: ${exitCode} | 耗时: ${duration}s]\x1b[0m\r\n`;
+        const labelPart = label ? ` | ${label}` : '';
+        const exitMsg = `\r\n${exitColor}[${exitIcon} 任务${isSuccess ? '完成' : '结束'}${labelPart} | 退出码: ${exitCode} | 耗时: ${duration}s]\x1b[0m\r\n`;
         terminalBuffer.append(projectId, exitMsg);
         terminalBuffer.close(projectId, exitCode);
-        
+
         broadcast('terminal_exit', {
           project_id: projectId,
           task_id: task.id,
@@ -439,71 +447,81 @@ fi`.trim();
           success: isSuccess,
           task_name: task.feature_name
         });
-        
-        // 判断任务成功的条件：
-        // 1. exitCode === 0，或者
-        // 2. 在输出中检测到任务完成标记
+
         if (isSuccess) {
-          const successMessage = taskCompletedDetected 
-            ? `开发完成 (检测到完成标记，耗时${duration}秒)`
-            : `开发完成 (耗时${duration}秒)`;
+          const toolPrefix = label ? `${label}, ` : '';
+          const successMessage = taskCompletedDetected
+            ? `开发完成 (${toolPrefix}检测到完成标记，耗时${duration}秒)`
+            : `开发完成 (${toolPrefix}耗时${duration}秒)`;
           resolve({
             success: true,
             message: successMessage,
             files_changed: []
           });
         } else {
+          const errorMsg = checkFailure && taskFailedDetected
+            ? `${label || '进程'} 输出包含失败标记`
+            : `${label || '进程'} 退出码: ${exitCode}`;
           resolve({
             success: false,
-            error: `进程退出码: ${exitCode}`,
+            error: errorMsg,
             retry: true
           });
         }
       });
-      
+
       setTimeout(() => {
         if (this.processes[projectId]) {
-          console.log(`[AgentExecutor] ${projectId} 任务执行超时，强制终止`);
+          console.log(`[AgentExecutor] ${projectId}${labelTag} 任务执行超时，强制终止`);
           this.processes[projectId].kill('SIGTERM');
         }
-      }, 25 * 60 * 1000);
+      }, timeoutMs);
     });
   }
 
+  async runKimiAgent(projectId, prompt, projectPath, task) {
+    const promptFile = path.join(__dirname, '../..', 'data', `prompt-${task.id}.txt`);
+    const kimiCmd = process.env.KIMI_CMD || 'kimi';
+    const shell = process.env.SHELL || 'bash';
+    const shellArgs = shell.includes('bash')
+      ? ['-lc', `${kimiCmd} -y --no-thinking -p "${promptFile}"`]
+      : ['-c', `${kimiCmd} -y --no-thinking -p "${promptFile}"`];
+
+    return this._runAgent(projectId, task, prompt, promptFile, shell, shellArgs, {
+      label: '',
+      successPatterns: [
+        /修改完成|修改已成功|已成功修改/i,
+        /任务已完成|任务完成|开发完成/i,
+        /已完成.*移除|已成功.*删除/i,
+        /总结.*修改|修改总结/i,
+        /功能已实现|已实现.*功能/i,
+        /代码已提交|已提交.*代码/i
+      ],
+      failurePatterns: [
+        /Authorization failed/i,
+        /invalid_authentication_error/i,
+        /API Key appears to be invalid/i,
+        /Your session may have expired/i,
+        /Cannot use this model/i,
+        /\bpermission denied\b/i
+      ],
+      checkFailure: true,
+      extraEnv: { KIMI_TIMEOUT: '1800' },
+      projectPath
+    });
+  }
 
   async runCursorAgent(projectId, prompt, projectPath, task) {
-    return new Promise((resolve) => {
-      const startTime = Date.now();
-      let outputBuffer = '';
-      let taskCompletedDetected = false;
-      let taskFailedDetected = false;
+    const promptFile = path.join(__dirname, '../..', 'data', `prompt-${task.id}.txt`);
+    const shell = process.env.SHELL || 'bash';
+    const cursorCommand = this.buildCursorCommand(promptFile, projectPath);
+    const shellArgs = shell.includes('bash')
+      ? ['-lc', cursorCommand]
+      : ['-c', cursorCommand];
 
-      const promptFile = path.join(__dirname, '../..', 'data', `prompt-${task.id}.txt`);
-      fs.writeFileSync(promptFile, prompt);
-
-      const shell = process.env.SHELL || 'bash';
-      const cursorCommand = this.buildCursorCommand(promptFile, projectPath);
-      const shellArgs = shell.includes('bash')
-        ? ['-lc', cursorCommand]
-        : ['-c', cursorCommand];
-
-      const ptyProcess = pty.spawn(shell, shellArgs, {
-        name: 'xterm-256color',
-        cols: 120,
-        rows: 40,
-        cwd: projectPath,
-        env: {
-          ...process.env,
-          TERM: 'xterm-256color',
-          FORCE_COLOR: '1'
-        }
-      });
-
-      this.processes[projectId] = ptyProcess;
-      shellManager.pause(projectId);
-      terminalBuffer.init(projectId, task.id);
-
-      const successPatterns = [
+    return this._runAgent(projectId, task, prompt, promptFile, shell, shellArgs, {
+      label: 'cursor',
+      successPatterns: [
         /修改完成|修改已成功|已成功修改/i,
         /任务已完成|任务完成|开发完成/i,
         /已完成.*移除|已成功.*删除/i,
@@ -512,8 +530,8 @@ fi`.trim();
         /代码已提交|已提交.*代码/i,
         /Task completed|Done[."|]|Finished[."|]/i,
         /To resume this session/i
-      ];
-      const failurePatterns = [
+      ],
+      failurePatterns: [
         /Cannot use this model/i,
         /Available models:/i,
         /error:/i,
@@ -521,121 +539,23 @@ fi`.trim();
         /\bexception\b/i,
         /\bnot found\b/i,
         /\bpermission denied\b/i
-      ];
-
-      ptyProcess.onData(async (data) => {
-        terminalBuffer.append(projectId, data);
-        broadcastTerminal(projectId, data);
-        fs.appendFileSync(EXECUTOR_LOG_PATH, data);
-
-        outputBuffer += data;
-        if (outputBuffer.length > 10240) {
-          outputBuffer = outputBuffer.slice(-10240);
-        }
-
-        if (!taskFailedDetected) {
-          for (const pattern of failurePatterns) {
-            if (pattern.test(outputBuffer)) {
-              taskFailedDetected = true;
-              console.log(`[AgentExecutor] ${projectId} (cursor) 检测到任务失败标记`);
-              break;
-            }
-          }
-        }
-
-        if (!taskCompletedDetected && !taskFailedDetected) {
-          for (const pattern of successPatterns) {
-            if (pattern.test(outputBuffer)) {
-              taskCompletedDetected = true;
-              console.log(`[AgentExecutor] ${projectId} (cursor) 检测到任务完成标记`);
-              break;
-            }
-          }
-        }
-      });
-
-      ptyProcess.onExit(async ({ exitCode }) => {
-        try { fs.unlinkSync(promptFile); } catch {}
-
-        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        const isSuccess = !taskFailedDetected && (exitCode === 0 || taskCompletedDetected);
-        const exitIcon = isSuccess ? '✓' : '✗';
-        const exitColor = isSuccess ? '[32m' : '[31m';
-        const exitMsg = `
-${exitColor}[${exitIcon} 任务${isSuccess ? '完成' : '结束'} | cursor | 退出码: ${exitCode} | 耗时: ${duration}s][0m
-`;
-        terminalBuffer.append(projectId, exitMsg);
-        terminalBuffer.close(projectId, exitCode);
-
-        broadcast('terminal_exit', {
-          project_id: projectId,
-          task_id: task.id,
-          code: exitCode,
-          duration: duration,
-          success: isSuccess,
-          task_name: task.feature_name
-        });
-
-        if (isSuccess) {
-          const successMessage = taskCompletedDetected
-            ? `开发完成 (cursor, 检测到完成标记，耗时${duration}秒)`
-            : `开发完成 (cursor, 耗时${duration}秒)`;
-          resolve({
-            success: true,
-            message: successMessage,
-            files_changed: []
-          });
-        } else {
-          resolve({
-            success: false,
-            error: taskFailedDetected ? 'cursor 输出包含失败标记' : `cursor 退出码: ${exitCode}`,
-            retry: true
-          });
-        }
-      });
-
-      setTimeout(() => {
-        if (this.processes[projectId]) {
-          console.log(`[AgentExecutor] ${projectId} (cursor) 任务执行超时，强制终止`);
-          this.processes[projectId].kill('SIGTERM');
-        }
-      }, 25 * 60 * 1000);
+      ],
+      checkFailure: true,
+      projectPath
     });
   }
 
   async runCodexAgent(projectId, prompt, projectPath, task) {
-    return new Promise((resolve) => {
-      const startTime = Date.now();
-      let outputBuffer = '';
-      let taskCompletedDetected = false;
-      let taskFailedDetected = false;
+    const promptFile = path.join(__dirname, '../..', 'data', `prompt-${task.id}.txt`);
+    const codexCmd = process.env.CODEX_CMD || 'codex';
+    const shell = process.env.SHELL || 'bash';
+    const shellArgs = shell.includes('bash')
+      ? ['-lc', `${codexCmd} exec --skip-git-repo-check --full-auto -C "${projectPath}" - < "${promptFile}"`]
+      : ['-c', `${codexCmd} exec --skip-git-repo-check --full-auto -C "${projectPath}" - < "${promptFile}"`];
 
-      const promptFile = path.join(__dirname, '../..', 'data', `prompt-${task.id}.txt`);
-      fs.writeFileSync(promptFile, prompt);
-
-      const codexCmd = process.env.CODEX_CMD || 'codex';
-      const shell = process.env.SHELL || 'bash';
-      const shellArgs = shell.includes('bash')
-        ? ['-lc', `${codexCmd} exec --full-auto -C "${projectPath}" - < "${promptFile}"`]
-        : ['-c', `${codexCmd} exec --full-auto -C "${projectPath}" - < "${promptFile}"`];
-
-      const ptyProcess = pty.spawn(shell, shellArgs, {
-        name: 'xterm-256color',
-        cols: 120,
-        rows: 40,
-        cwd: projectPath,
-        env: {
-          ...process.env,
-          TERM: 'xterm-256color',
-          FORCE_COLOR: '1'
-        }
-      });
-
-      this.processes[projectId] = ptyProcess;
-      shellManager.pause(projectId);
-      terminalBuffer.init(projectId, task.id);
-
-      const successPatterns = [
+    return this._runAgent(projectId, task, prompt, promptFile, shell, shellArgs, {
+      label: 'codex',
+      successPatterns: [
         /修改完成|修改已成功|已成功修改/i,
         /任务已完成|任务完成|开发完成/i,
         /已完成.*移除|已成功.*删除/i,
@@ -645,91 +565,17 @@ ${exitColor}[${exitIcon} 任务${isSuccess ? '完成' : '结束'} | cursor | 退
         /All done/i,
         /Completed/i,
         /To resume this session/i
-      ];
-      const failurePatterns = [
+      ],
+      failurePatterns: [
         /error:/i,
         /\bfailed\b/i,
         /\bexception\b/i,
         /I did not call.*API/i,
         /没有调用任务完成\/失败 API/i,
         /not call(?:ed)? .*complete/i
-      ];
-
-      ptyProcess.onData(async (data) => {
-        terminalBuffer.append(projectId, data);
-        broadcastTerminal(projectId, data);
-        fs.appendFileSync(EXECUTOR_LOG_PATH, data);
-
-        outputBuffer += data;
-        if (outputBuffer.length > 10240) {
-          outputBuffer = outputBuffer.slice(-10240);
-        }
-
-        if (!taskFailedDetected) {
-          for (const pattern of failurePatterns) {
-            if (pattern.test(outputBuffer)) {
-              taskFailedDetected = true;
-              console.log(`[AgentExecutor] ${projectId} (codex) 检测到任务失败标记`);
-              break;
-            }
-          }
-        }
-
-        if (!taskCompletedDetected && !taskFailedDetected) {
-          for (const pattern of successPatterns) {
-            if (pattern.test(outputBuffer)) {
-              taskCompletedDetected = true;
-              console.log(`[AgentExecutor] ${projectId} (codex) 检测到任务完成标记`);
-              break;
-            }
-          }
-        }
-      });
-
-      ptyProcess.onExit(async ({ exitCode }) => {
-        try { fs.unlinkSync(promptFile); } catch {}
-
-        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        const isSuccess = !taskFailedDetected && (exitCode === 0 || taskCompletedDetected);
-        const exitIcon = isSuccess ? '✓' : '✗';
-        const exitColor = isSuccess ? '\x1b[32m' : '\x1b[31m';
-        const exitMsg = `\r\n${exitColor}[${exitIcon} 任务${isSuccess ? '完成' : '结束'} | codex | 退出码: ${exitCode} | 耗时: ${duration}s]\x1b[0m\r\n`;
-        terminalBuffer.append(projectId, exitMsg);
-        terminalBuffer.close(projectId, exitCode);
-
-        broadcast('terminal_exit', {
-          project_id: projectId,
-          task_id: task.id,
-          code: exitCode,
-          duration: duration,
-          success: isSuccess,
-          task_name: task.feature_name
-        });
-
-        if (isSuccess) {
-          const successMessage = taskCompletedDetected
-            ? `开发完成 (codex, 检测到完成标记，耗时${duration}秒)`
-            : `开发完成 (codex, 耗时${duration}秒)`;
-          resolve({
-            success: true,
-            message: successMessage,
-            files_changed: []
-          });
-        } else {
-          resolve({
-            success: false,
-            error: taskFailedDetected ? 'codex 输出包含失败标记' : `codex 退出码: ${exitCode}`,
-            retry: true
-          });
-        }
-      });
-
-      setTimeout(() => {
-        if (this.processes[projectId]) {
-          console.log(`[AgentExecutor] ${projectId} (codex) 任务执行超时，强制终止`);
-          this.processes[projectId].kill('SIGTERM');
-        }
-      }, 25 * 60 * 1000);
+      ],
+      checkFailure: true,
+      projectPath
     });
   }
 

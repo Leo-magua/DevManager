@@ -95,7 +95,7 @@ class TaskQueue {
     if (!project) return null;
 
     try {
-      const devStatePath = path.join(project.path, 'dev_state.json');
+      const devStatePath = path.join(project.path, project.key_files?.dev_state || 'dev_state.json');
       const data = await fs.readFile(devStatePath, 'utf-8');
       const devState = JSON.parse(data);
       return {
@@ -351,6 +351,93 @@ class TaskQueue {
     return { success: true, task: executing };
   }
 
+  async findFeatureTask(taskId) {
+    const featureId = String(taskId || '').replace(/^TASK-/, '');
+    if (!featureId) return null;
+
+    const config = getConfig();
+    for (const project of config.monitored_projects) {
+      if (!project.active) continue;
+      const projectData = await this.getProjectFeatures(project.id);
+      const feature = projectData?.features?.find(f => f.id === featureId);
+      if (feature) {
+        return {
+          project,
+          feature,
+          task: this._toTaskInfo(project.id, feature)
+        };
+      }
+    }
+
+    return null;
+  }
+
+  async completeTaskByTaskId(taskId, result = {}) {
+    const found = await this.findFeatureTask(taskId);
+    if (!found) {
+      return { error: '任务不存在或已完成', task_id: taskId };
+    }
+
+    const executing = this.executingTasks.get(found.project.id);
+    if (executing?.id === taskId) {
+      return this.completeTask(found.project.id, result);
+    }
+
+    if (found.feature.status === 'Completed') {
+      return { success: true, project_id: found.project.id, task: found.task, already_completed: true };
+    }
+
+    await this.updateFeatureStatus(found.project.id, found.feature.id, 'Completed', {
+      agent_task_id: null,
+      task_name: '等待指令',
+      in_progress_feature_id: null,
+      start_time: null,
+      last_error: null,
+      trial_count: 0
+    });
+
+    await this.addChangelog(found.project.id, 'system', `任务完成: ${found.feature.name}`, result.message || '');
+    this.executingTasks.delete(found.project.id);
+    broadcast('task_completed', { project_id: found.project.id, task: found.task, result });
+
+    if (this._onTaskCompleted) {
+      try {
+        await this._onTaskCompleted(found.project.id);
+      } catch (err) {
+        console.error('[TaskQueue] 任务完成回调执行失败:', err.message);
+      }
+    }
+
+    return { success: true, project_id: found.project.id, task: found.task, recovered: true };
+  }
+
+  async failTaskByTaskId(taskId, error, retry = true) {
+    const found = await this.findFeatureTask(taskId);
+    if (!found) {
+      return { error: '任务不存在或已完成', task_id: taskId };
+    }
+
+    const executing = this.executingTasks.get(found.project.id);
+    if (executing?.id === taskId) {
+      return this.reportError(found.project.id, error, retry);
+    }
+
+    await this.updateFeatureStatus(found.project.id, found.feature.id, retry ? STATUS_QUEUED : 'Pending', {
+      agent_task_id: null,
+      task_name: retry ? '等待重试' : '等待指令',
+      in_progress_feature_id: null,
+      start_time: null,
+      last_error: error,
+      trial_count: Number(found.feature.trial_count || 0) + 1
+    });
+
+    await this.addChangelog(found.project.id, 'error', `任务失败: ${found.feature.name}`, error);
+    this.executingTasks.delete(found.project.id);
+    broadcast('task_failed', { project_id: found.project.id, task: found.task, error, retry });
+
+    return { success: true, status: retry ? 'retry' : 'failed', project_id: found.project.id, task: found.task, recovered: true };
+  }
+
   /**
    * 报告错误
    */
@@ -466,7 +553,7 @@ class TaskQueue {
     const project = config.monitored_projects.find(p => p.id === projectId);
     if (!project) return;
 
-    const devStatePath = path.join(project.path, 'dev_state.json');
+    const devStatePath = path.join(project.path, project.key_files?.dev_state || 'dev_state.json');
     
     try {
       const data = await fs.readFile(devStatePath, 'utf-8');
@@ -499,7 +586,7 @@ class TaskQueue {
     const project = config.monitored_projects.find(p => p.id === projectId);
     if (!project) return;
 
-    const devStatePath = path.join(project.path, 'dev_state.json');
+    const devStatePath = path.join(project.path, project.key_files?.dev_state || 'dev_state.json');
     
     try {
       const data = await fs.readFile(devStatePath, 'utf-8');
@@ -543,6 +630,43 @@ class TaskQueue {
 
   isPaused() {
     return this.globalPaused;
+  }
+
+  /**
+   * 获取当前日志（stub，暂未实现持久化日志存储）
+   */
+  getCurrentLogs(projectId) {
+    return [];
+  }
+
+  /**
+   * 停止所有正在执行的任务（stub）
+   */
+  async stopAllTasks(reason = '用户手动停止所有任务') {
+    const results = [];
+    for (const [projectId, task] of this.executingTasks.entries()) {
+      await this.stopTask(projectId, reason);
+      results.push({ project_id: projectId, task });
+    }
+    return { stopped: results.length, results };
+  }
+
+  /**
+   * 重置项目任务（stub）
+   */
+  async resetProjectTask(projectId, reason = '手动重置') {
+    const executing = this.executingTasks.get(projectId);
+    if (executing) {
+      await this.stopTask(projectId, reason);
+    }
+    return { success: true };
+  }
+
+  /**
+   * 认领任意项目的待处理任务（stub，当前未实现跨项目自动分配）
+   */
+  async claimAnyTask(agentInfo = {}) {
+    return { error: '跨项目自动认领暂未实现，请指定 project_id' };
   }
 }
 

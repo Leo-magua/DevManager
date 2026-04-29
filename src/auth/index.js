@@ -1,8 +1,13 @@
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { getConfig } = require('../config');
 
 const COOKIE_NAME = 'devmanager_auth';
 const sessions = new Map();
+
+function isBcryptHash(str) {
+  return typeof str === 'string' && /^\$2[aby]\$/.test(str);
+}
 
 function getAuthConfig() {
   const config = getConfig();
@@ -19,6 +24,18 @@ function getAuthConfig() {
 function getConfiguredPassword() {
   const config = getConfig();
   return process.env.DEVMANAGER_PASSWORD || config.auth?.password || '';
+}
+
+/**
+ * 验证密码：支持 bcrypt hash 和明文降级比较
+ */
+function verifyPassword(input, stored) {
+  if (!stored || !input) return false;
+  if (isBcryptHash(stored)) {
+    return bcrypt.compareSync(input, stored);
+  }
+  // 降级：明文比较（理论上 config 已做迁移，不会走到这里）
+  return input === stored;
 }
 
 function parseCookies(cookieHeader = '') {
@@ -71,13 +88,13 @@ function hasValidPasswordHeader(req) {
   if (!configuredPassword) return false;
 
   const headerPassword = req.headers['x-devmanager-password'];
-  if (headerPassword && headerPassword === configuredPassword) {
+  if (headerPassword && verifyPassword(headerPassword, configuredPassword)) {
     return true;
   }
 
   const authHeader = req.headers.authorization || '';
   if (authHeader.startsWith('Bearer ')) {
-    return authHeader.slice(7) === configuredPassword;
+    return verifyPassword(authHeader.slice(7), configuredPassword);
   }
 
   return false;
@@ -160,5 +177,6 @@ module.exports = {
   isAuthenticated,
   parseCookies,
   requireWriteAccess,
-  setSessionCookie
+  setSessionCookie,
+  verifyPassword
 };

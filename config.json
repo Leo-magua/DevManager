@@ -5,12 +5,12 @@
     "port": 81,
     "description": "统一管理 AllProject 下所有子项目的开发看板"
   },
-  "projects_root": "/var/www/AllProject",
+  "projects_root": "/Users/wendy/AllProject",
   "monitored_projects": [
     {
       "id": "personalwork",
       "name": "PersonalWork",
-      "path": "/var/www/AllProject/PersonalWork",
+      "path": "/Users/wendy/AllProject/PersonalWork",
       "description": "个人项目作品管理工具",
       "tech_stack": [
         "React",
@@ -25,12 +25,12 @@
         "requirements": "功能需求表.md"
       },
       "active": true,
-      "default_tool_type": "kimi"
+      "default_tool_type": "codex"
     },
     {
       "id": "chickennoteLM",
       "name": "ChickenNoteLM",
-      "path": "/var/www/AllProject/chickennoteLM",
+      "path": "/Users/wendy/AllProject/chickennoteLM",
       "description": "智能笔记管理 + AI 辅助整理，支持多用户隔离与增量同步",
       "tech_stack": [
         "JavaScript",
@@ -45,43 +45,12 @@
         "requirements": "FEATURE_LIST.md"
       },
       "active": true,
-      "default_tool_type": "codex"
-    },
-    {
-      "id": "larkmessagebox",
-      "name": "lark-message-box",
-      "path": "/var/www/AllProject/lark-message-box",
-      "description": "自动发现的项目: lark-message-box",
-      "tech_stack": [
-        "Unknown"
-      ],
-      "key_files": {
-        "dev_state": "dev_state.json",
-        "user_backlog": "user_backlog.json",
-        "status": ".kimi/status.md"
-      },
-      "active": true,
-      "auto_detected": true,
-      "detected_at": "2026-04-12T02:51:54.518Z",
-      "deploy_config": {
-        "project_id": "larkmessagebox",
-        "project_name": "Lark_message_box",
-        "project_path": "/var/www/AllProject/Lark_message_box",
-        "type": "nodejs",
-        "enabled": true,
-        "nginx_path": "larkmessagebox",
-        "port": 5702,
-        "template": "nodejs",
-        "custom_config": null,
-        "created_at": "2026-04-11T16:32:23.665Z",
-        "updated_at": "2026-04-12T02:51:54.519Z"
-      },
       "default_tool_type": "kimi"
     },
     {
       "id": "larkmessage",
       "name": "Lark_Message",
-      "path": "/var/www/AllProject/Lark_Message",
+      "path": "/Users/wendy/AllProject/Lark_Message",
       "description": "自动发现的项目: Lark_Message",
       "tech_stack": [
         "Unknown"
@@ -97,7 +66,7 @@
       "deploy_config": {
         "project_id": "larkmessage",
         "project_name": "Lark_Message",
-        "project_path": "/var/www/AllProject/Lark_Message",
+        "project_path": "/Users/wendy/AllProject/Lark_Message",
         "type": "nodejs",
         "enabled": true,
         "nginx_path": "larkmessage",
@@ -108,6 +77,68 @@
         "updated_at": "2026-04-13T14:52:42.411Z"
       },
       "default_tool_type": "cursor"
+    },
+    {
+      "id": "bubblechartgpt",
+      "name": "BubbleChart_GPT",
+      "path": "/Users/wendy/AllProject/BubbleChart_GPT",
+      "description": "自动发现的项目: BubbleChart_GPT",
+      "default_tool_type": "kimi",
+      "tech_stack": [
+        "Unknown"
+      ],
+      "key_files": {
+        "dev_state": "dev_state.json",
+        "user_backlog": "user_backlog.json",
+        "status": ".kimi/status.md"
+      },
+      "active": true,
+      "auto_detected": true,
+      "detected_at": "2026-04-25T14:34:11.494Z",
+      "deploy_config": {
+        "project_id": "bubblechartgpt",
+        "project_name": "BubbleChart_GPT",
+        "project_path": "/Users/wendy/AllProject/BubbleChart_GPT",
+        "type": "nodejs",
+        "enabled": true,
+        "nginx_path": "bubblechartgpt",
+        "port": 4993,
+        "template": "nodejs",
+        "custom_config": null,
+        "created_at": "2026-04-25T14:34:11.494Z",
+        "updated_at": "2026-04-25T14:34:11.494Z"
+      }
+    },
+    {
+      "id": "larkmessagebox",
+      "name": "lark-message-box",
+      "path": "/Users/wendy/AllProject/lark-message-box",
+      "description": "自动发现的项目: lark-message-box",
+      "default_tool_type": "kimi",
+      "tech_stack": [
+        "Unknown"
+      ],
+      "key_files": {
+        "dev_state": "dev_state.json",
+        "user_backlog": "user_backlog.json",
+        "status": ".kimi/status.md"
+      },
+      "active": true,
+      "auto_detected": true,
+      "detected_at": "2026-04-26T11:01:11.215Z",
+      "deploy_config": {
+        "project_id": "larkmessagebox",
+        "project_name": "lark-message-box",
+        "project_path": "/Users/wendy/AllProject/lark-message-box",
+        "type": "nodejs",
+        "enabled": true,
+        "nginx_path": "larkmessagebox",
+        "port": 5702,
+        "template": "nodejs",
+        "custom_config": null,
+        "created_at": "2026-04-26T11:01:11.215Z",
+        "updated_at": "2026-04-26T11:01:11.215Z"
+      }
     }
   ],
   "features": {
@@ -116,7 +147,7 @@
     "multi_project": true
   },
   "auth": {
-    "password": "devmanager-2026",
+    "password": "$2b$10$cY4KmMXdZxEzmpxgVkgz5uHoQvmcYouHkqzSNcTTUzC3A8g4VxgRm",
     "session_ttl_hours": 24
   },
   "scan_settings": {

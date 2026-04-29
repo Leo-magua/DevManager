@@ -156,10 +156,25 @@ class DeployServiceManager {
     }
   }
 
-  stopService(projectId, taskId) {
+  async stopService(projectId, taskId) {
     const config = getConfig();
     const project = config.monitored_projects.find(p => p.id === projectId);
     const projectPath = project ? project.path : path.join(config.projects_root, projectId);
+
+    const manualPortMatch = String(taskId).match(/^manual-(\d+)$/);
+    if (manualPortMatch) {
+      const port = Number(manualPortMatch[1]);
+      const processInfo = await this.getPortProcessInfo(port);
+      if (!processInfo?.pid) {
+        return { success: false, error: `端口 ${port} 未找到运行中的服务` };
+      }
+      try {
+        process.kill(processInfo.pid, 'SIGTERM');
+        return { success: true, message: `服务已停止 (PID: ${processInfo.pid}, port: ${port})` };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    }
     
     const pidFiles = [
       path.join(this.pidsDir, `${projectId}-${taskId}.pid`),
@@ -185,7 +200,7 @@ class DeployServiceManager {
     const results = [];
     
     for (const svc of services) {
-      results.push(this.stopService(projectId, svc.taskId));
+      results.push(await this.stopService(projectId, svc.taskId));
     }
     
     return { stopped: results.length, results };

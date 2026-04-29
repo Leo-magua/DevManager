@@ -169,8 +169,10 @@
         let deployControlsHtml = '';
         if (deployConfig) {
           const hostname = window.location.hostname;
+          const port = window.location.port && window.location.port !== '81' ? ':' + window.location.port : '';
           const nginxPath = deployConfig.nginx_path;
-          const accessUrl = 'http://' + hostname + ':8080/' + nginxPath + '/';
+          const accessPath = project.id === 'personalwork' ? '/' : '/' + nginxPath + '/';
+          const accessUrl = window.location.protocol + '//' + hostname + port + accessPath;
           const startStopBtn = isRunning
             ? '<button onclick="stopProject(\'' + project.id + '\')" class="px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded border border-red-500/30 transition-colors">停止</button>'
             : '<button onclick="startProject(\'' + project.id + '\')" class="px-3 py-1.5 text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded border border-emerald-500/30 transition-colors">启动</button>';
@@ -212,11 +214,11 @@
         const res = await fetch(`${API_BASE}/api/deploy/${projectId}/start`, { method: 'POST' });
         const data = await res.json();
         
-        if (data.success) {
+        if (res.ok && data.success) {
           showToast(data.message, 'success');
           setTimeout(loadDeploymentStatus, 2000);
         } else {
-          showToast(data.error || '启动失败', 'error');
+          showToast(data.error || data.message || '启动失败', 'error');
         }
       } catch (err) {
         showToast('启动失败: ' + err.message, 'error');
