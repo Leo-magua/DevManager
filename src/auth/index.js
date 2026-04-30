@@ -33,15 +33,49 @@ function getConfiguredPassword() {
 }
 
 /**
- * 验证密码：支持 bcrypt hash 和明文降级比较
+ * Constant-time plaintext comparison via crypto.timingSafeEqual.
+ * Pads both buffers to equal length to avoid early length leak.
  */
-function verifyPassword(input, stored) {
+function timingSafeStringEqual(a, b) {
+  const aBuf = Buffer.from(String(a), 'utf8');
+  const bBuf = Buffer.from(String(b), 'utf8');
+  // Compare same-length buffers; record length mismatch separately.
+  const len = Math.max(aBuf.length, bBuf.length, 1);
+  const aPad = Buffer.alloc(len);
+  const bPad = Buffer.alloc(len);
+  aBuf.copy(aPad);
+  bBuf.copy(bPad);
+  const equal = crypto.timingSafeEqual(aPad, bPad);
+  return equal && aBuf.length === bBuf.length;
+}
+
+/**
+ * 验证密码：支持 bcrypt hash 和明文降级比较（异步，避免阻塞事件循环）
+ */
+async function verifyPassword(input, stored) {
+  if (!stored || !input) return false;
+  if (isBcryptHash(stored)) {
+    try {
+      return await bcrypt.compare(input, stored);
+    } catch {
+      return false;
+    }
+  }
+  // 降级：明文比较（理论上 config 已做迁移，不会走到这里）
+  // 使用 timingSafeEqual 避免基于早期返回的时序攻击。
+  return timingSafeStringEqual(input, stored);
+}
+
+/**
+ * 同步密码校验（仅用于 WebSocket 升级握手等不能 await 的入口）。
+ * 避免阻塞事件循环：bcrypt.compareSync 仍存在阻塞问题，调用方需谨慎。
+ */
+function verifyPasswordSync(input, stored) {
   if (!stored || !input) return false;
   if (isBcryptHash(stored)) {
     return bcrypt.compareSync(input, stored);
   }
-  // 降级：明文比较（理论上 config 已做迁移，不会走到这里）
-  return input === stored;
+  return timingSafeStringEqual(input, stored);
 }
 
 function parseCookies(cookieHeader = '') {
@@ -94,13 +128,13 @@ function hasValidPasswordHeader(req) {
   if (!configuredPassword) return false;
 
   const headerPassword = req.headers['x-devmanager-password'];
-  if (headerPassword && verifyPassword(headerPassword, configuredPassword)) {
+  if (headerPassword && verifyPasswordSync(headerPassword, configuredPassword)) {
     return true;
   }
 
   const authHeader = req.headers.authorization || '';
   if (authHeader.startsWith('Bearer ')) {
-    return verifyPassword(authHeader.slice(7), configuredPassword);
+    return verifyPasswordSync(authHeader.slice(7), configuredPassword);
   }
 
   return false;
@@ -184,5 +218,6 @@ module.exports = {
   parseCookies,
   requireWriteAccess,
   setSessionCookie,
-  verifyPassword
+  verifyPassword,
+  verifyPasswordSync
 };
