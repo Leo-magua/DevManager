@@ -1,10 +1,25 @@
 /**
  * Nginx 配置管理器
- * 
+ *
  * 统一管理 AllProject 下所有项目的反向代理配置
  * - 扫描项目时自动生成 Nginx 路由
  * - 支持自定义路径、端口映射
  * - 自动重载 Nginx 服务
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ *  ⚠️  ALTERNATE REVERSE PROXY ENGINE (opt-in)
+ * ─────────────────────────────────────────────────────────────────────
+ *
+ * The default reverse proxy in DevManager is `proxy.js` (pure Node, no
+ * external deps). NginxManager is the *alternate* engine — both want to
+ * own port 80, so only one may be active at a time.
+ *
+ * To make this engine primary:
+ *   1. Stop proxy.js (or set DEVMANAGER_DISABLE_PROXY_JS=1).
+ *   2. Set DEVMANAGER_PROXY_ENGINE=nginx (read by app bootstrap).
+ *   3. Configure NOPASSWD sudoers (see README "macOS sudoers 配置")
+ *      otherwise non-TTY callers will receive SUDO_UNAVAILABLE rather
+ *      than hanging.
  */
 
 const fs = require('fs').promises;

@@ -1,12 +1,44 @@
 /**
  * DevManager 反向代理 (Node.js)
  * 80 端口统一入口，PersonalWork 为主项目
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ *  ⚠️  PRIMARY REVERSE PROXY: proxy.js (this file)
+ * ─────────────────────────────────────────────────────────────────────
+ *
+ * DevManager ships with TWO reverse-proxy implementations that both listen
+ * on port 80 and therefore CANNOT run at the same time:
+ *
+ *   1. proxy.js (this file, default)        — pure Node.js, zero deps
+ *   2. src/services/nginx-manager.js        — generates Homebrew nginx
+ *                                              config and `sudo nginx -s
+ *                                              reload`s it
+ *
+ * The default deployment (start-all.sh) uses proxy.js. The NginxManager is
+ * an opt-in alternative kept around for setups that need nginx-only
+ * features (HTTP/2, advanced caching, etc.). To switch engines:
+ *
+ *   - Set DEVMANAGER_PROXY_ENGINE=nginx and stop proxy.js, OR
+ *   - Set DEVMANAGER_DISABLE_PROXY_JS=1 to make this script exit cleanly
+ *     when the alternate engine owns the port.
+ *
+ * If port 80 is already in use we now log a warning and exit with code 0
+ * (instead of crashing) when DEVMANAGER_DISABLE_PROXY_JS=1 — this lets
+ * supervisors keep the unit "running" without restart loops.
  */
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const httpProxy = require('http-proxy');
+
+// Allow this proxy to be disabled entirely (when nginx engine is primary).
+const DISABLE_PROXY_JS = /^(1|true|yes)$/i.test(process.env.DEVMANAGER_DISABLE_PROXY_JS || '');
+if (DISABLE_PROXY_JS) {
+  console.log('[Proxy] DEVMANAGER_DISABLE_PROXY_JS=1 — proxy.js disabled, exiting cleanly.');
+  console.log('[Proxy] Reverse-proxy duties are expected to be handled by NginxManager.');
+  process.exit(0);
+}
 
 const proxy = httpProxy.createProxyServer({
   ws: true,
@@ -119,13 +151,26 @@ server.on('upgrade', (req, socket, head) => {
 const PORT = process.env.PROXY_PORT ? parseInt(process.env.PROXY_PORT) : 80;
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`[Proxy] 端口 ${PORT} 已被占用`);
+    // Port collision is the expected case when NginxManager (or any other
+    // reverse proxy) already owns port 80. Log a warning instead of
+    // crashing so supervisors don't enter a restart loop. Set
+    // DEVMANAGER_DISABLE_PROXY_JS=1 to suppress proxy.js entirely.
+    console.warn(
+      `[Proxy] 端口 ${PORT} 已被占用 — 假定另一个反向代理（如 nginx 引擎）已接管。`
+    );
+    console.warn(
+      '[Proxy] 提示: 设置 DEVMANAGER_DISABLE_PROXY_JS=1 可让本脚本在启动时直接退出，' +
+        '避免重复尝试。'
+    );
+    // Exit 0 so launchd / systemd treat this as a successful no-op.
+    process.exit(0);
   } else if (err.code === 'EACCES' || err.code === 'EPERM') {
     console.error(`[Proxy] 无权限监听端口 ${PORT}，80 端口请使用 sudo 启动`);
+    process.exit(1);
   } else {
     console.error('[Proxy] 启动失败:', err.message);
+    process.exit(1);
   }
-  process.exit(1);
 });
 
 server.listen(PORT, () => {
