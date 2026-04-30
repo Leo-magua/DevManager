@@ -12,6 +12,7 @@ const path = require('path');
 const { getConfig } = require('../config');
 const { getTaskQueue } = require('../core/task-queue');
 const { broadcast } = require('../websocket/broadcast');
+const { writeJsonAtomic } = require('../utils/atomic-write');
 
 const router = express.Router();
 
@@ -107,7 +108,7 @@ router.post('/direct', async (req, res) => {
       details: `来源: 后端API调用, ID: ${newId}`
     });
 
-    await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+    await writeJsonAtomic(devStatePath, devState);
 
     let task = null;
     if (record_only && auto_execute) {
@@ -261,7 +262,7 @@ async function createDirectFeature(projectId, featureData) {
   }
 
   devState.feature_list.push(newFeature);
-  await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+  await writeJsonAtomic(devStatePath, devState);
 
   return newFeature;
 }

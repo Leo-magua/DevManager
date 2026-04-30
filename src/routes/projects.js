@@ -10,6 +10,7 @@ const { getStateSync } = require('../core/state-sync');
 const { getDeployServiceManager } = require('../services/deploy-manager');
 const { broadcast } = require('../websocket/broadcast');
 const { normalizeToolType, scanProjects, readProjectData, DEFAULT_TOOL_TYPE } = require('./utils');
+const { writeJsonAtomic } = require('../utils/atomic-write');
 
 function createProjectRoutes() {
   const router = express.Router();
@@ -149,7 +150,7 @@ function createProjectRoutes() {
         const fs = require('fs').promises;
         const devStatePath = path.join(project.path, project.key_files?.dev_state || 'dev_state.json');
         const updatedDevState = { ...devState, feature_list: featureList };
-        await fs.writeFile(devStatePath, JSON.stringify(updatedDevState, null, 2));
+        await writeJsonAtomic(devStatePath, updatedDevState);
         console.log(`[API] 已保存状态变更到 ${devStatePath}`);
       } catch (err) {
         console.error(`[API] 保存 dev_state.json 失败:`, err.message);

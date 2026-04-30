@@ -10,6 +10,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { getConfig } = require('../config');
 const { broadcast } = require('../websocket/broadcast');
+const { writeJsonAtomic } = require('../utils/atomic-write');
 
 /** 开发队列中等待（顺序 = feature_list 中相对顺序） */
 const STATUS_QUEUED = 'Queued';
@@ -156,7 +157,7 @@ class TaskQueue {
     const raw = await fs.readFile(devStatePath, 'utf-8');
     const devState = JSON.parse(raw);
     devState.feature_list = featureList;
-    await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+    await writeJsonAtomic(devStatePath, devState);
   }
 
   /**
@@ -572,7 +573,7 @@ class TaskQueue {
         ...contextUpdate
       };
 
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
     } catch (err) {
       console.error(`[TaskQueue] 更新 dev_state.json 失败:`, err.message);
     }
@@ -606,7 +607,7 @@ class TaskQueue {
         devState.changelog = devState.changelog.slice(0, 50);
       }
 
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
     } catch (err) {
       console.error(`[TaskQueue] 添加 changelog 失败:`, err.message);
     }

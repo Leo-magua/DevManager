@@ -9,6 +9,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { getConfig } = require('../config');
 const { getAgentExecutor } = require('./agent-executor');
+const { writeJsonAtomic } = require('../utils/atomic-write');
 
 class StateSync {
   async syncOnStartup() {
@@ -81,7 +82,7 @@ class StateSync {
     
     if (needsSave) {
       devState.updated_at = new Date().toISOString();
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
       console.log(`[StateSync] ${projectId} 状态已修复`);
       return true;
     } else {

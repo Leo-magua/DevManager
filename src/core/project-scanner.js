@@ -6,6 +6,7 @@ const path = require('path');
 const { getConfig, saveConfig } = require('../config');
 const { broadcast } = require('../websocket/broadcast');
 const { getNginxManager } = require('../services/nginx-manager');
+const { writeJsonAtomic } = require('../utils/atomic-write');
 
 class ProjectScanner {
   constructor() {
@@ -150,7 +151,7 @@ class ProjectScanner {
         }],
         updated_at: new Date().toISOString()
       };
-      await fs.writeFile(devStatePath, JSON.stringify(defaultDevState, null, 2));
+      await writeJsonAtomic(devStatePath, defaultDevState);
       result.created.push('dev_state.json');
     }
 
@@ -166,7 +167,7 @@ class ProjectScanner {
         updated_at: new Date().toISOString(),
         items: []
       };
-      await fs.writeFile(backlogPath, JSON.stringify(defaultBacklog, null, 2));
+      await writeJsonAtomic(backlogPath, defaultBacklog);
       result.created.push('user_backlog.json');
     }
 

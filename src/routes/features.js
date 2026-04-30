@@ -10,6 +10,7 @@ const { getAgentExecutor } = require('../core/agent-executor');
 const { getNLParser } = require('../services/nl-parser');
 const { broadcast } = require('../websocket/broadcast');
 const { SUPPORTED_TOOL_TYPES, normalizeToolType, DEFAULT_TOOL_TYPE } = require('./utils');
+const { writeJsonAtomic } = require('../utils/atomic-write');
 
 function createFeatureRoutes() {
   const router = express.Router();
@@ -53,7 +54,7 @@ function createFeatureRoutes() {
 
       backlog.items.unshift(newItem);
       backlog.updated_at = new Date().toISOString();
-      await fs.writeFile(backlogPath, JSON.stringify(backlog, null, 2));
+      await writeJsonAtomic(backlogPath, backlog);
 
       const devStatePath = path.join(project.path, project.key_files?.dev_state || 'dev_state.json');
       let devState = { feature_list: [], changelog: [] };
@@ -90,7 +91,7 @@ function createFeatureRoutes() {
         devState.changelog = devState.changelog.slice(0, 50);
       }
 
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
 
       let task = null;
       if (auto_start) {
@@ -153,7 +154,7 @@ function createFeatureRoutes() {
           return res.status(400).json({ error: '无效的执行工具', allowed: [...SUPPORTED_TOOL_TYPES, null] });
         }
         feature.updated_at = new Date().toISOString();
-        await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+        await writeJsonAtomic(devStatePath, devState);
       }
 
       const curSt = feature.status || 'Pending';
@@ -287,7 +288,7 @@ function createFeatureRoutes() {
       [features[idxA], features[idxB]] = [features[idxB], features[idxA]];
 
       devState.feature_list = features;
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
       broadcast('feature_updated', { project_id: projectId, feature_id: featureId });
 
       res.json({ success: true, message: '顺序已调整' });
@@ -334,7 +335,7 @@ function createFeatureRoutes() {
       }
       feature.updated_at = new Date().toISOString();
 
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
       broadcast('feature_updated', { project_id: projectId, feature_id: featureId });
 
       res.json({ success: true, feature });
@@ -375,7 +376,7 @@ function createFeatureRoutes() {
             n++;
           }
         }
-        await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+        await writeJsonAtomic(devStatePath, devState);
         let started = false;
         if (taskQueue.isPaused()) {
           taskQueue.setPaused(false);
@@ -420,7 +421,7 @@ function createFeatureRoutes() {
             n++;
           }
         }
-        await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+        await writeJsonAtomic(devStatePath, devState);
         if (taskQueue.isPaused()) {
           taskQueue.setPaused(false);
         }
@@ -502,7 +503,7 @@ function createFeatureRoutes() {
         devState.changelog = devState.changelog.slice(0, 50);
       }
 
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
 
       if (auto_start && createdFeatures.length > 0) {
         const next = await taskQueue.maybeStartNextFromQueue(projectId, {
@@ -574,7 +575,7 @@ function createFeatureRoutes() {
         devState.changelog = devState.changelog.slice(0, 50);
       }
 
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
 
       broadcast('feature_deleted', { project_id: projectId, feature_id: featureId });
 
@@ -676,7 +677,7 @@ function createFeatureRoutes() {
         devState.changelog = devState.changelog.slice(0, 50);
       }
 
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
 
       broadcast('feature_updated', {
         project_id: projectId,
@@ -742,7 +743,7 @@ function createFeatureRoutes() {
         details: `来源: "${input.substring(0, 50)}..."`
       });
 
-      await fs.writeFile(devStatePath, JSON.stringify(devState, null, 2));
+      await writeJsonAtomic(devStatePath, devState);
 
       let task = null;
       if (auto_execute) {
