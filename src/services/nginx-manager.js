@@ -104,6 +104,57 @@ const DEPLOY_TEMPLATES = {
   },
 };
 
+// macOS 上 nginx 绑定 80 端口需要 sudo。DevManager 通常以 launchd / 后台服务方式运行，
+// 没有可用的 TTY，密码提示会让进程 *无声地* 永久挂起。我们在调用 sudo 前先做一次能力检测：
+//
+//   - 若 stdin 是 TTY，则可以正常交互输入密码；
+//   - 否则要求已配置 NOPASSWD 的 sudoers 条目（参考 README "macOS sudoers 配置"），
+//     当检测失败时直接返回错误，避免进程卡死。
+//
+// 检测策略：在非 TTY 环境下使用 `sudo -n true` 探测是否有免密权限。结果会缓存以避免每次
+// 重载都重新探测。
+const SUDO_BIN = process.env.SUDO_BIN || 'sudo';
+let sudoCapabilityCache = null; // { ok: boolean, reason?: string }
+
+async function detectSudoCapability() {
+  if (sudoCapabilityCache) return sudoCapabilityCache;
+  // 进程拥有 TTY 时，sudo 可以交互式提示密码。
+  if (process.stdin && process.stdin.isTTY) {
+    sudoCapabilityCache = { ok: true, mode: 'tty' };
+    return sudoCapabilityCache;
+  }
+  // 非交互场景：要求 NOPASSWD。
+  try {
+    await execAsync(`${SUDO_BIN} -n true`);
+    sudoCapabilityCache = { ok: true, mode: 'nopasswd' };
+  } catch (err) {
+    sudoCapabilityCache = {
+      ok: false,
+      mode: 'none',
+      reason:
+        '当前进程没有 TTY 且 sudo 未配置 NOPASSWD，无法在后台执行 nginx 命令。' +
+        '请按 README 配置 /etc/sudoers.d/devmanager-nginx（NOPASSWD: <nginx 路径>）。'
+    };
+  }
+  return sudoCapabilityCache;
+}
+
+// 测试用：清理缓存（在权限变更后允许重新探测）。
+function _resetSudoCapabilityCache() {
+  sudoCapabilityCache = null;
+}
+
+async function runSudo(command) {
+  const cap = await detectSudoCapability();
+  if (!cap.ok) {
+    const err = new Error(cap.reason);
+    err.code = 'SUDO_UNAVAILABLE';
+    throw err;
+  }
+  return execAsync(`${SUDO_BIN} ${command}`);
+}
+
+
 class NginxManager {
   constructor() {
     this.configStatus = {
@@ -418,8 +469,8 @@ server {
         };
       }
 
-      // 重载服务
-      await execAsync(`sudo ${NGINX_BIN} -s reload`);
+      // 重载服务（sudo 调用前会检测 TTY / NOPASSWD，失败时立即返回明确错误而不是挂起）
+      await runSudo(`${NGINX_BIN} -s reload`);
       
       console.log('[NginxManager] Nginx 服务已重载');
       
@@ -642,7 +693,7 @@ server {
    */
   async startNginx() {
     try {
-      await execAsync(`sudo ${NGINX_BIN}`);
+      await runSudo(`${NGINX_BIN}`);
       console.log('[NginxManager] Nginx 已启动');
       return { success: true };
     } catch (err) {

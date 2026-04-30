@@ -37,6 +37,10 @@ if lsof -i :80 2>/dev/null | grep -q LISTEN; then
 else
   echo "⚠️  80 端口当前未监听；如需启用 80 入口，请手动运行:"
   echo "   sudo env PROXY_PORT=80 PERSONALWORK_PORT=${PERSONALWORK_PORT} ${NODE_BIN} proxy.js"
+  echo ""
+  echo "   提示：若改用内置 NginxManager（DEVMANAGER_PROXY_ENGINE=nginx），"
+  echo "   后台运行需要 NOPASSWD sudo 配置，否则 nginx -s reload 会无声挂起。"
+  echo "   详见 README 的「macOS sudoers 配置」段落。"
 fi
 
 echo ""
